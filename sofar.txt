@@ -1,0 +1,95 @@
+PREDATOR - STATUS SO FAR (2026-11-04)
+=====================================
+
+PROJECT
+- Raspberry Pi 5 (8GB) as a universal field-bus gateway/translator:
+  BACnet/IP, BACnet MS/TP, Modbus RTU (RS-485), etc.
+- Repo: https://github.com/siPyt/predator.git (branch: main)
+
+WHAT IS ON THE PI (read from the microSD boot partition)
+- OS: Raspberry Pi OS 64-bit with Desktop (pi-gen build "Raspberry Pi reference 2026-10-06", stage4).
+- Flashed with Raspberry Pi Imager; first-boot configured via cloud-init
+  (user-data, network-config, meta-data on the boot partition).
+- Card: 256 GB SanDisk. Boot partition label "bootfs" (FAT32); Linux root is ext4
+  (not readable from Windows).
+- Hostname: predator
+- SSH username: admin123  (NOT "predator")
+- SSH enabled, password login allowed. (Password intentionally NOT recorded here.
+  It is weak; change it with `passwd` and move to key auth when stable.)
+- Wi-Fi configured for open network "M-GUEST" only - not usable here.
+- Ethernet: originally DHCP only.
+- config.txt is the Pi 5 default: no UART / RS-485 overlays yet.
+- cmdline.txt still has console=serial0,115200 (serial console ON - must be disabled
+  before using RS-485 UART).
+
+SETUP STEPS FROM configured.txt - STATUS
+- Flash Raspberry Pi OS 64-bit Desktop + Imager customisation: DONE
+- Disable serial console / enable serial hardware: NOT DONE
+- Install log2ram (protect SD card from log wear): NOT DONE
+- Enable remote GUI (VNC / Raspberry Pi Connect): NOT DONE
+- RS-485 UART overlays (dtoverlay=uart2/uart3 etc.) + RTS direction control: NOT DONE
+- Optional: PREEMPT_RT kernel if MS/TP timing jitters: NOT DONE
+- Install gateway software (BACnet/IP, MS/TP, Modbus): NOT STARTED
+
+NETWORK SITUATION
+- Pi Ethernet is wired DIRECTLY to this Windows PC (no router/DHCP server).
+- Wi-Fi is not available for the Pi.
+- PC wired adapter: "Ethernet" (Intel I219-LM), static 192.168.1.101/24.
+- predator / predator.local did NOT resolve (no DHCP/mDNS on the direct link).
+
+CHANGES MADE TO THE microSD BOOT PARTITION (mounted as D: on this PC)
+- network-config: eth0 set to static 192.168.1.50/24 (dhcp4/dhcp6 off).
+- meta-data: instance-id -> rpi-imager-1793809604705-static1 (forces cloud-init to re-apply).
+- cmdline.txt: ds=nocloud;i=... changed to the same new instance-id.
+- Backups of the originals are on the card: network-config.bak, meta-data.bak, cmdline.txt.bak
+  (restore these to undo).
+- The static IP worked: the Pi answered ping (TTL 64) and SSH port 22 opened at 192.168.1.50.
+
+SSH KEY SETUP
+- Created a dedicated key on the PC: %USERPROFILE%\.ssh\predator_ed25519 (+ .pub), no passphrase.
+- Public key NOT yet installed on the Pi (password prompt hangs - see below).
+- Command to install it (run in PowerShell, one line, enter the Pi password when asked):
+  ssh admin123@192.168.1.50 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '<contents of predator_ed25519.pub>' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo KEY_INSTALLED"
+- Pi host key (ED25519) fingerprint accepted:
+  SHA256:3uw/FFgd6+1WCoG+T+bU2+LrC+DkMTiWCEZjx2PIadM
+- Note: an earlier attempt used "$env:USERPROFILE.ssh" (missing backslash) and piped an
+  empty file, so it printed KEY_INSTALLED without installing anything.
+
+CURRENT PROBLEM: PI DROPS OFF THE NETWORK
+- After each power-on the Pi answers for ~1-3 minutes, then stops answering ping and SSH.
+- SSH hangs at the password prompt, then "Connection timed out" / "Connection aborted".
+- Windows event log (e1dexpress) shows the PC's Ethernet LINK going down/up:
+  down 10:57, up 10:58:53 (Pi powered on), down 11:04:22; adapter showed "Disconnected".
+  -> this is a physical-layer symptom, not an SSH/QoS/DHCP problem.
+- User reported the Pi's RED power LED OFF while it was unresponsive (green LED solid).
+  On a Pi 5 the red LED is on whenever it has power -> suggests power loss/brown-out or a
+  cable/connector issue. User says the power source is not the cause; still unconfirmed.
+- Latest observation: pings ~50% lost (2 received / 2 lost) - link is unreliable.
+- PC adapter has Energy Efficient Ethernet = On (also Ultra Low Power Mode, PCIe link power
+  saving). Disabling EEE needs admin; this session lacks admin rights. Command for an
+  administrator PowerShell:
+    Set-NetAdapterAdvancedProperty -Name 'Ethernet' -DisplayName 'Energy Efficient Ethernet' -DisplayValue 'Off'
+
+THINGS EVALUATED AND RULED OUT / UNLIKELY
+- sshd IPQoS tweak: doesn't explain link-down or lost pings.
+- NetworkManager DHCP timeout: static IP already set, DHCP off.
+- Wi-Fi/Ethernet routing conflict: Wi-Fi not connected.
+- pcie_aspm=off: low confidence, not applied.
+
+NEXT STEPS
+1. Fix the physical/link stability: confirm the red LED stays solid, try a different
+   (short, known-good) Ethernet cable, check the Pi 5 power supply (official 27W 5V/5A)
+   and any case/power button/HAT, then re-test (ping + SSH for 5+ minutes).
+2. Optionally disable EEE on the PC adapter (admin PowerShell command above).
+3. Once stable: install the SSH key, then connect with
+   ssh -i %USERPROFILE%\.ssh\predator_ed25519 admin123@192.168.1.50
+4. Then: enable VNC / Raspberry Pi Connect for the GUI, disable serial console,
+   install log2ram, add RS-485 UART overlays, update OS and EEPROM, change the password.
+5. Later: choose/install the gateway stack (BACnet/IP, MS/TP, Modbus RTU) and wire RS-485.
+6. If it cannot be stabilised blind: connect a monitor/keyboard to the Pi, or read logs
+   from the card's ext4 partition via WSL (requires admin).
+
+NOTES
+- No Windows admin rights in the assistant session (cannot assign drive letters, change
+  adapter settings).
+- No past session history exists for an earlier "fix" on another Pi; nothing to reuse.

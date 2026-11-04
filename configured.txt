@@ -1,0 +1,31 @@
+For an industrial protocol gateway translating between BACnet/IP, BACnet MS/TP, and Modbus RTU, your top choice is Raspberry Pi OS (64-bit) with Desktop.
+
+When you open the official Raspberry Pi Imager to flash your 256GB SanDisk card, you will see several options. Here is the exact breakdown of what to download and why it matters for fieldbus timing and reliability.
+
+1. The Best Choice: Raspberry Pi OS (64-bit) with Desktop
+(Avoid the "Full" version—just get the standard Desktop version)
+
+Deterministic Timing for MS/TP & RTU: BACnet MS/TP (token-passing) and Modbus RTU (character-frame gaps) have strict serial timing requirements. Raspberry Pi OS uses a very lightweight window manager (Wayfire/Labwc) that consumes minimal CPU and RAM, leaving maximum system resources and interrupt priority for your RS-485 UART transceivers.
+
+First-Class Hardware & UART Support: The Raspberry Pi 5 8GB uses the RP1 southbridge chip to handle GPIO and UARTs. Raspberry Pi OS has the most mature kernel overlays (/boot/firmware/config.txt) for enabling multiple hardware UARTs (dtoverlay=uart2, uart3, etc.) and hardware flow control (RTS/CTS) for RS-485 direction control.
+
+Real-Time (PREEMPT_RT) Kernel Path: If your BACnet MS/TP token passing experiences jitter under load, Raspberry Pi OS makes it very easy to switch to a PREEMPT_RT (Real-Time) Linux kernel, which is crucial for strict sub-millisecond serial deadlines.
+
+Built-in Remote GUI: It comes pre-installed with Raspberry Pi Connect and VNC, allowing you to access the GUI remotely to run packet analyzers like Wireshark or YABE (Yet Another BACnet Explorer) without keeping a monitor plugged into the gateway.
+
+2. Why Not Choose "Raspberry Pi OS Full"?
+The Full image bundles LibreOffice, Scratch, educational games, and math tools. On an industrial gateway, this is unnecessary bloat that takes up background services and requires frequent package updates. Stick to the standard Raspberry Pi OS (64-bit) with Desktop.
+
+
+
+
+
+
+Crucial Setup Tips for Your 256GB SanDisk Card
+Because industrial gateways log data and pass tokens 24/7, protecting your SanDisk 256GB Extreme microSDXC card from wear and corruption is essential:
+
+Use Raspberry Pi Imager's "OS Customisation": Before clicking Write, press Ctrl+Shift+X (or click "Edit Settings") in the Imager to pre-configure your hostname, username/password, Wi-Fi/Ethernet settings, and enable SSH.
+
+Prevent SD Card Wear (log2ram): Protocol gateways generate massive amounts of syslog and debug data. Install log2ram immediately after booting so that continuous serial/network logs are written to RAM instead of burning out sectors on your SanDisk card.
+
+Disable Console on Serial: Once booted into the GUI, open Raspberry Pi Configuration -> Interfaces (or run sudo raspi-config), enable the Serial Port hardware, but disable the Serial Console so the Linux kernel doesn't dump boot text onto your Modbus/BACnet RS-485 bus.
