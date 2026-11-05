@@ -531,6 +531,28 @@ VERIFIED
   (XDG autostart at actual desktop login, already installed) is a normal persistent
   session, not an ephemeral SSH one, so it is not expected to be affected.
 
+UPDATE (same day, later): APP ICON + FIXED A REAL AUTOSTART BUG
+- Generated an original dark/circuit-board panther icon (gateway/assets/predator-icon.png)
+  for the explorer app. Wired into: the window itself (root.iconphoto), a proper
+  ~/.local/share/applications/predator-gateway.desktop entry, and a PINNED icon in the
+  wf-panel-pi top panel's launchers list (so closing the window - which the user hit and
+  couldn't get back - now has a permanent icon to reopen it from, same as the browser/
+  file-manager/terminal icons already there).
+- REAL BUG FOUND WHILE DOING THIS: ~/.config/autostart/predator-viewer.desktop was
+  missing a `Path=` key, so `python -m gateway.viewer` ran with the wrong working
+  directory and failed with ModuleNotFoundError on every boot - the autostart viewer had
+  never actually launched successfully before today, this whole time. Fixed in both the
+  live file and the repo template (systemd/predator-viewer.desktop.in).
+- OOPS, SELF-INFLICTED: `pkill -f /usr/bin/wf-panel-pi` to reload the panel config also
+  matched (and killed) its `lwrespawn` supervisor wrapper (whose own command line
+  contains that same string as an argument), so nothing respawned it and the WHOLE top
+  panel disappeared, not just picked up the new icon. Fixed with a clean reboot (restores
+  everything through the normal supervised autostart path) rather than fighting manual
+  SSH process management further.
+- VERIFIED via a post-reboot screenshot: panel present, pinned predator-gateway launcher
+  icon visible (5th icon, after terminal), viewer window open and showing its own icon in
+  the window list too. No leftover test overrides (checked /ports - clean/null).
+
 
 CHAPTER 8 - THE REAL DOMINANT CAUSE: eth0 WAS SET TO DHCP ON A LINK WITH NO DHCP SERVER
 =========================================================================================
