@@ -553,6 +553,20 @@ UPDATE (same day, later): APP ICON + FIXED A REAL AUTOSTART BUG
   icon visible (5th icon, after terminal), viewer window open and showing its own icon in
   the window list too. No leftover test overrides (checked /ports - clean/null).
 
+UPDATE (same day, later): RTC BATTERY ADDED - CLOCK NOW SET AND PERSISTENT
+- User added a battery to the Pi 5's onboard RTC connector. Confirmed via dmesg the RTC
+  chip was already detected (`rpi-rtc ...: registered as rtc0`, /dev/rtc0 exists) but had
+  never been set - it read back 1970-01-01 (epoch) at boot.
+- `hwclock` is NOT installed on this image at all (no /sbin or /usr/sbin binary) - used
+  systemd's own RTC-aware path instead: `timedatectl set-ntp false` (no internet for NTP
+  to do anything useful anyway, and systemd-timedated refuses manual time changes while
+  NTP is enabled) then `timedatectl set-time "<correct local time>"`, which sets the
+  system clock AND writes the hardware RTC in one step (confirmed: RTC time now reads
+  17:00 UTC matching 11:00 CST local - correct, RTC stores UTC internally).
+- With the battery now powering rtc0, this should persist correctly across power-offs/
+  reboots going forward (the kernel auto-reads rtc0 into the system clock at every boot -
+  this is what was producing the 1970 date before the battery/this fix).
+
 
 CHAPTER 8 - THE REAL DOMINANT CAUSE: eth0 WAS SET TO DHCP ON A LINK WITH NO DHCP SERVER
 =========================================================================================
