@@ -1,5 +1,9 @@
 # predator
 
+**Looking to just use predator day-to-day (plugging in wiring, viewing
+results, getting the CSV)? See [USER_GUIDE.md](./USER_GUIDE.md) instead -
+this README is the technical/developer reference.**
+
 A standalone industrial protocol gateway running on a Raspberry Pi 5: it
 auto-senses whatever is plugged in - BACnet/IP on the Ethernet (RJ45) port, or
 BACnet MS/TP / Modbus RTU on a USB-to-RS485 adapter - figures out the protocol
