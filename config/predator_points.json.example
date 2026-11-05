@@ -1,0 +1,19 @@
+[
+  {
+    "name": "example_mstp_point",
+    "exposed_object": "analog-value:1",
+    "writable": false,
+    "poll_seconds": 5,
+    "source": "mstp",
+    "mstp": {"device_instance": 1, "object": "analog-input:1"}
+  },
+  {
+    "name": "example_modbus_point",
+    "exposed_object": "analog-value:2",
+    "writable": true,
+    "poll_seconds": 5,
+    "source": "modbus",
+    "modbus": {"unit": 1, "register_type": "holding", "address": 100,
+               "data_type": "uint16", "scale": 1.0}
+  }
+]

@@ -1,0 +1,6 @@
+pymodbus>=3.6,<4
+pyserial>=3.5
+# NOT classic "bacpypes": it depends on Python's asyncore/asynchat modules,
+# which were removed in Python 3.12 - confirmed by trying to import it during
+# development. bacpypes3 is the actively maintained asyncio-based rewrite.
+bacpypes3>=0.0.100,<0.1

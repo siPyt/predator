@@ -1,0 +1,47 @@
+; predator gateway example config - copy to ~/predator_gateway.conf and edit.
+; Any value you don't set here falls back to the built-in default in
+; gateway/config.py. Delete a line to go back to that default.
+
+[autodetect]
+; With this on (the default), you do NOT need to fill in [mstp]/[modbus]
+; iface/baud below - gateway/discovery.py figures out what's plugged into
+; each /dev/ttyUSB*/ttyACM* port on its own. Set enabled=false and fill in
+; [mstp]/[modbus] manually if you want to pin a known, fixed setup instead.
+enabled = true
+port_glob = /dev/ttyUSB*,/dev/ttyACM*
+scan_bauds = 9600,19200,38400,57600,76800,115200
+rescan_seconds = 45
+
+[mstp]
+; Only used when [autodetect] enabled=false.
+enabled = true
+iface = /dev/ttyUSB0
+baud = 38400
+our_mac = 100
+
+[modbus]
+; Only used when [autodetect] enabled=false.
+enabled = true
+iface = /dev/ttyUSB1
+baud = 19200
+parity = N
+
+[bacnet_ip]
+device_instance = 599100
+device_name = PredatorGateway
+; How often predator sends a global Who-Is to find other BACnet/IP devices
+; on the Ethernet (RJ45) side.
+discovery_whois_seconds = 30
+
+[csv]
+; Where the discovered-points CSV goes; desktop_copy is what's visible when
+; you VNC/log into the Pi's GUI. Also downloadable from the HTTP API below.
+path = ~/predator_discovered.csv
+desktop_copy = ~/Desktop/predator_discovered.csv
+
+[api]
+; Browse to http://<predator-ip>:8099/ from the PC for status/CSV download.
+port = 8099
+
+[files]
+points_map = ~/predator_points.json

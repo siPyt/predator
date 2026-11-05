@@ -1,5 +1,10 @@
 __pycache__/
 *.pyc
+*.pyo
 *.egg-info/
 .venv/
+*-venv/
 predator_scan*.csv
+predator_gateway.conf
+predator_points.json
+predator_discovered.csv

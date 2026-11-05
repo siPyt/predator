@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Predator Gateway
+Comment=Discovered BACnet/Modbus points + serial port explorer
+Exec={{VENV_DIR}}/bin/python -m gateway.viewer
+Icon={{REPO_DIR}}/gateway/assets/predator-icon.png
+Path={{REPO_DIR}}
+Terminal=false
+Categories=Utility;
