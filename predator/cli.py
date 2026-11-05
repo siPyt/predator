@@ -82,6 +82,8 @@ def main(argv=None):
         print("== %s" % name, file=sys.stderr)
         try:
             job()
+        except (OSError, ValueError) as exc:
+            print("%s failed: %s" % (name, exc), file=sys.stderr)
         except Exception:
             traceback.print_exc()
     sink.close()

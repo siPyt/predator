@@ -53,5 +53,7 @@ sudo .venv/bin/predator -o scan.csv \
 - **PROFINET** discovery is DCP only (identity); cyclic IO data is not read.
 - MQTT cannot enumerate topics without subscribing; only topics published during `--mqtt-seconds` appear.
   Sparkplug B payloads are stored as raw protobuf hex.
-- Tests (`python -m unittest discover -s tests`) cover the parsers and run the MS/TP, PROFIBUS, Modbus RTU/TCP and
-  MQTT scanners end to end against simulated devices. Nothing has been verified on real hardware yet.
+- Tests (`python -m unittest discover -s tests`) fuzz every parser with garbage/truncated input, check the MS/TP CRCs
+  against the BACnet standard, and run the BACnet/IP (incl. routed MS/TP devices), MS/TP, PROFIBUS, Modbus RTU/TCP
+  and MQTT scanners end to end against simulated devices. Nothing has been verified on real hardware yet, so run
+  a first scan against a known device and compare the CSV with the vendor tool before relying on it.

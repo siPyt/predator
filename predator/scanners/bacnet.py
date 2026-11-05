@@ -17,8 +17,7 @@ VALUE_TYPES = {0, 1, 2, 3, 4, 5, 13, 14, 19}
 PROP_NAME, PROP_VALUE, PROP_UNITS, PROP_LIST, PROP_DESC = 77, 85, 117, 76, 28
 PROP_VENDOR, PROP_MODEL, PROP_FW = 121, 70, 44
 UNITS = {3: "A", 5: "V", 19: "kWh", 29: "%RH", 47: "W", 48: "kW", 62: "degC", 64: "degF", 95: "", 98: "%"}
-VENDORS = {7: "Johnson Controls", 5: "Honeywell", 8: "Siemens Industry", 10: "Schneider Electric",
-           24: "Delta Controls", 35: "Trane", 36: "Carrier", 142: "Siemens Building Technologies"}
+VENDORS = {2: "Trane", 5: "Johnson Controls", 7: "Siemens Schweiz AG", 8: "Delta Controls"}
 WHO_IS = bytes.fromhex("810b000c0120ffff00ff1008")
 
 
@@ -104,18 +103,21 @@ def parse_npdu(data):
     if len(data) < 2 or data[0] != 1:
         return None
     ctl, i, info = data[1], 2, {}
-    if ctl & 0x20:
-        dnet, dlen = struct.unpack(">HB", data[i : i + 3])
-        i += 3 + dlen
-        info["dnet"] = dnet
-    if ctl & 0x08:
-        snet, slen = struct.unpack(">HB", data[i : i + 3])
-        info["snet"] = snet
-        info["sadr"] = data[i + 3 : i + 3 + slen].hex()
-        i += 3 + slen
+    try:
+        if ctl & 0x20:
+            dnet, dlen = struct.unpack(">HB", data[i : i + 3])
+            i += 3 + dlen
+            info["dnet"] = dnet
+        if ctl & 0x08:
+            snet, slen = struct.unpack(">HB", data[i : i + 3])
+            info["snet"] = snet
+            info["sadr"] = data[i + 3 : i + 3 + slen].hex()
+            i += 3 + slen
+    except struct.error:
+        return None
     if ctl & 0x20:
         i += 1
-    if ctl & 0x80:
+    if ctl & 0x80 or i > len(data):
         return None
     return info, i
 
@@ -254,21 +256,22 @@ def encode_read_property(invoke, otype, inst, prop, index=None, dest=None):
 
 
 class Client:
-    def __init__(self, timeout):
+    def __init__(self, timeout, port=PORT, bind_port=PORT):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         try:
-            self.sock.bind(("", PORT))
+            self.sock.bind(("", bind_port))
         except OSError:
             self.sock.bind(("", 0))
         self.timeout = timeout
+        self.port = port
         self.invoke = 0
 
     def discover(self, targets, seconds):
         for t in targets:
             try:
-                self.sock.sendto(WHO_IS, (t, PORT))
+                self.sock.sendto(WHO_IS, (t, self.port))
             except OSError:
                 pass
         devices = {}
@@ -294,7 +297,7 @@ class Client:
 
     def read(self, ip, otype, inst, prop, index=None, dest=None):
         self.invoke = (self.invoke + 1) & 0xFF
-        self.sock.sendto(encode_read_property(self.invoke, otype, inst, prop, index, dest), (ip, PORT))
+        self.sock.sendto(encode_read_property(self.invoke, otype, inst, prop, index, dest), (ip, self.port))
         end = time.monotonic() + self.timeout
         while time.monotonic() < end:
             self.sock.settimeout(max(0.05, end - time.monotonic()))
@@ -330,10 +333,18 @@ def read_device(client, ip, inst, dest, ctx):
         meta[key] = _first(client.read(ip, 8, inst, prop, dest=dest) or [])
     ctx.emit(Record("BACnet", src, str(inst), "device", meta.get("name") or "", details=meta))
     count = _first(client.read(ip, 8, inst, PROP_LIST, 0, dest) or [])
-    if not isinstance(count, int):
-        return
-    for idx in range(1, min(count, ctx.max_points) + 1):
-        oid = _first(client.read(ip, 8, inst, PROP_LIST, idx, dest) or [])
+    if isinstance(count, int):
+        oids = []
+        for idx in range(1, min(count, ctx.max_points) + 1):
+            oids.append(_first(client.read(ip, 8, inst, PROP_LIST, idx, dest) or []))
+        if count > ctx.max_points:
+            ctx.log("  device %d: %d objects, reading first %d (--max-points)" % (inst, count, ctx.max_points))
+    else:
+        # some devices cannot read object-list by index; try the whole list (works when it fits one APDU)
+        oids = (client.read(ip, 8, inst, PROP_LIST, None, dest) or [])[: ctx.max_points]
+        if not oids:
+            ctx.log("  device %d: object list unreadable" % inst)
+    for oid in oids:
         if not isinstance(oid, str) or ":" not in oid:
             continue
         tname, num = oid.rsplit(":", 1)
@@ -362,7 +373,10 @@ def scan(ctx: Context):
         for (ip, inst, snet, _sadr), (iam, dest) in sorted(devices.items(), key=lambda kv: str(kv[0])):
             vendor = VENDORS.get(iam["vendor_id"], "vendor-id %d" % iam["vendor_id"])
             ctx.log("  %s device %d (%s)" % (ip, inst, vendor))
-            read_device(client, ip, inst, dest, ctx)
+            try:
+                read_device(client, ip, inst, dest, ctx)
+            except Exception as exc:
+                ctx.log("  bacnet device %d at %s failed: %r" % (inst, ip, exc))
     finally:
         client.close()
 

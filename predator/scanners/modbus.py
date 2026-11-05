@@ -48,11 +48,15 @@ class TcpTransport:
         self.tid = (self.tid + 1) & 0xFFFF
         self.sock.sendall(struct.pack(">HHHB", self.tid, 0, len(pdu) + 1, unit) + pdu)
         try:
-            hdr = self._recv(7)
-            _tid, proto, length, _unit = struct.unpack(">HHHB", hdr)
-            if proto != 0 or length < 2:
-                return None
-            return self._recv(length - 1)
+            for _ in range(8):  # skip stale replies left over from earlier timed-out requests
+                hdr = self._recv(7)
+                tid, proto, length, runit = struct.unpack(">HHHB", hdr)
+                if proto != 0 or length < 2 or length > 260:
+                    return None
+                body = self._recv(length - 1)
+                if tid == self.tid and runit == unit:
+                    return body
+            return None
         except (OSError, socket.timeout):
             return None
 
@@ -159,6 +163,8 @@ def scan(ctx: Context):
         try:
             for unit in ctx.modbus_units:
                 scan_unit(t, unit, host, "Modbus TCP", ctx)
+        except Exception as exc:
+            ctx.log("modbus %s failed: %r" % (host, exc))
         finally:
             t.close()
 

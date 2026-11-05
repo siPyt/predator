@@ -1,7 +1,6 @@
 """MQTT: finds brokers, subscribes to everything, and flattens each message into CSV rows."""
 import json
 import threading
-import time
 
 from ..context import Context
 from ..records import Record
@@ -85,4 +84,7 @@ def scan(ctx: Context):
                 brokers.append((host, port))
     ctx.log("mqtt: %d broker(s)" % len(brokers))
     for host, port in brokers:
-        collect(host, port, ctx)
+        try:
+            collect(host, port, ctx)
+        except Exception as exc:
+            ctx.log("mqtt %s:%d failed: %r" % (host, port, exc))
