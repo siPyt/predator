@@ -74,6 +74,8 @@ def decode_app(tag, raw, ln):
     if tag == 7:
         enc, txt = raw[0], raw[1:]
         return txt.decode("utf-16-be" if enc == 4 else "latin-1" if enc == 5 else "utf-8", "replace")
+    if tag == 8:
+        return "bits:" + raw[1:].hex()
     if tag == 12:
         t, inst = decode_object_id(raw)
         return "%s:%d" % (OBJECT_TYPES.get(t, t), inst)
@@ -149,6 +151,90 @@ def parse_read_ack(apdu, invoke):
             i = j + ln
     except (IndexError, struct.error):
         return None
+
+
+PROPS = {85: "present-value", 77: "object-name", 28: "description", 111: "status-flags", 36: "event-state",
+         117: "units", 81: "out-of-service", 103: "reliability", 70: "model-name", 44: "firmware-revision"}
+
+
+def parse_tree(data, i=0):
+    """Nested tag items: ('c', tag, raw) context, ('a', tag, value) application, ('o', tag, [items]) opened."""
+    items = []
+    while i < len(data):
+        tag, ctx, kind, ln, j = decode_tag(data, i)
+        if kind == "close":
+            return items, j
+        if kind == "open":
+            inner, i = parse_tree(data, j)
+            items.append(("o", tag, inner))
+            continue
+        is_bool = not ctx and tag == 1
+        raw = b"" if is_bool else data[j : j + ln]
+        items.append(("c", tag, raw) if ctx else ("a", tag, decode_app(tag, raw, ln)))
+        i = j + (0 if is_bool else ln)
+    return items, i
+
+
+def _values(items):
+    vals = [v for k, _t, v in items if k == "a"]
+    return vals[0] if len(vals) == 1 else (vals or None)
+
+
+def _prop(code):
+    return PROPS.get(code, "property-%d" % code)
+
+
+def decode_apdu_points(apdu):
+    """[(object type, instance, property name, value)] carried by a ReadProperty/RPM ACK or COV notification."""
+    if not apdu:
+        return []
+    kind = apdu[0] >> 4
+    try:
+        if kind == 3 and not apdu[0] & 0x08 and len(apdu) > 3:
+            svc, body = apdu[2], apdu[3:]
+        elif kind == 1 and len(apdu) > 1:
+            svc, body = apdu[1], apdu[2:]
+        elif kind == 0 and not apdu[0] & 0x08 and len(apdu) > 4:
+            svc, body = apdu[3], apdu[4:]
+        else:
+            return []
+        if (kind, svc) not in ((3, 12), (3, 14), (1, 2), (0, 1)):
+            return []
+        items, _ = parse_tree(body)
+        out = []
+        if (kind, svc) == (3, 12):
+            oid = next((v for k, t, v in items if k == "c" and t == 0), None)
+            prop = next((v for k, t, v in items if k == "c" and t == 1), None)
+            vals = next((v for k, t, v in items if k == "o" and t == 3), None)
+            if oid and prop is not None and vals is not None and len(oid) == 4:
+                otype, inst = decode_object_id(oid)
+                out.append((OBJECT_TYPES.get(otype, "type-%d" % otype), inst, _prop(int.from_bytes(prop, "big")), _values(vals)))
+        elif (kind, svc) == (3, 14):
+            cur = None
+            for k, t, v in items:
+                if k == "c" and t == 0 and len(v) == 4:
+                    cur = decode_object_id(v)
+                elif k == "o" and t == 1 and cur:
+                    prop = None
+                    for k2, t2, v2 in v:
+                        if k2 == "c" and t2 == 2:
+                            prop = int.from_bytes(v2, "big")
+                        elif k2 == "o" and t2 == 4 and prop is not None:
+                            out.append((OBJECT_TYPES.get(cur[0], "type-%d" % cur[0]), cur[1], _prop(prop), _values(v2)))
+        else:
+            mon = next((v for k, t, v in items if k == "c" and t == 2 and len(v) == 4), None)
+            lst = next((v for k, t, v in items if k == "o" and t == 4), [])
+            if mon:
+                otype, inst = decode_object_id(mon)
+                prop = None
+                for k, t, v in lst:
+                    if k == "c" and t == 0:
+                        prop = int.from_bytes(v, "big")
+                    elif k == "o" and t == 2 and prop is not None:
+                        out.append((OBJECT_TYPES.get(otype, "type-%d" % otype), inst, _prop(prop), _values(v)))
+        return out
+    except (IndexError, struct.error, ValueError):
+        return []
 
 
 # ---- encoding ---------------------------------------------------------------
@@ -336,7 +422,7 @@ def scan_serial(ctx: Context, spec: SerialSpec):
     for baud in spec.bauds or [38400, 9600, 19200, 76800]:
         ctx.log("bacnet-mstp %s %d baud (passive, %ds)" % (spec.port, baud, ctx.sniff_seconds))
         ser = open_serial(spec.port, baud, "N", 0.1)
-        masters, devices, buf = {}, set(), b""
+        masters, devices, buf, last = {}, set(), b"", {}
         deadline = time.monotonic() + ctx.sniff_seconds
         try:
             while time.monotonic() < deadline:
@@ -354,6 +440,14 @@ def scan_serial(ctx: Context, spec: SerialSpec):
                             devices.add((src, iam["instance"]))
                             ctx.emit(Record("BACnet MS/TP", spec.port, str(src), "device", iam["instance"],
                                             details={"vendor_id": iam["vendor_id"], "baud": baud}))
+                        for otype, inst, prop, value in decode_apdu_points(data[parsed[1]:] if parsed else b""):
+                            key = (src, otype, inst, prop)
+                            if last.get(key, object()) == value:
+                                continue
+                            last[key] = value
+                            point = "%s:%d" % (otype, inst) + ("" if prop == "present-value" else "/" + prop)
+                            ctx.emit(Record("BACnet MS/TP", spec.port, str(src), point, value,
+                                            details={"baud": baud, "via": "passive capture"}))
         finally:
             ser.close()
         if masters:

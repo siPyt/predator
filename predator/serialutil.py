@@ -1,10 +1,11 @@
 import time
 
 
-def open_serial(port, baud, parity="N", timeout=0.2):
+def open_serial(port, baud, parity="N", timeout=0.2, rs485=False):
+    """Opens a device path or a pyserial URL (socket://, loop://); rs485 drives RTS for TX direction."""
     import serial
 
-    return serial.Serial(
+    ser = serial.serial_for_url(
         port,
         baudrate=baud,
         bytesize=8,
@@ -12,6 +13,11 @@ def open_serial(port, baud, parity="N", timeout=0.2):
         stopbits=1,
         timeout=timeout,
     )
+    if rs485:
+        import serial.rs485
+
+        ser.rs485_mode = serial.rs485.RS485Settings(rts_level_for_tx=True, rts_level_for_rx=False)
+    return ser
 
 
 def sniff(ser, seconds, on_bytes):

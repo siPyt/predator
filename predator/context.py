@@ -36,6 +36,7 @@ class Context:
     mqtt_password: Optional[str] = None
     mqtt_seconds: float = 20.0
     serial: List[SerialSpec] = field(default_factory=list)
+    rs485: bool = False
     _open: Dict[int, List[str]] = field(default_factory=dict)
 
     def hosts(self):

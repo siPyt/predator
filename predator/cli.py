@@ -42,6 +42,7 @@ def build_parser():
     p.add_argument("--modbus-units", default="1-10", help="unit ids, e.g. 1-10,247")
     p.add_argument("--modbus-registers", type=int, default=32, help="registers/coils per table to read")
     p.add_argument("--max-points", type=int, default=500, help="max BACnet objects read per device")
+    p.add_argument("--rs485-rts", action="store_true", help="drive RTS for RS-485 direction (Modbus RTU on UART HATs)")
     p.add_argument("--timeout", type=float, default=3.0)
     p.add_argument("--sniff-seconds", type=float, default=20.0, help="passive listen time per baud on serial buses")
     return p
@@ -64,6 +65,7 @@ def main(argv=None):
         mqtt_password=os.environ.get("PREDATOR_MQTT_PASSWORD"),
         mqtt_seconds=args.mqtt_seconds,
         serial=args.serial,
+        rs485=args.rs485_rts,
     )
     wanted = list(IP_SCANNERS) if args.protocols == "all" else [n.strip() for n in args.protocols.split(",")]
     unknown = [n for n in wanted if n not in IP_SCANNERS]

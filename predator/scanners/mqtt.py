@@ -52,7 +52,7 @@ def collect(host, port, ctx: Context):
         client.tls_set()
 
     def on_connect(c, _u, _f, reason, _p=None):
-        if reason == 0:
+        if not reason.is_failure:
             state["connected"] = True
             c.subscribe([("#", 0), ("$SYS/#", 0)])
         else:

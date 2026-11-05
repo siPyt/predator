@@ -32,6 +32,7 @@ class ModbusError(Exception):
 class TcpTransport:
     def __init__(self, host, port=PORT, timeout=1.0):
         self.sock = socket.create_connection((host, port), timeout=timeout)
+        self.sock.settimeout(min(timeout, 1.0))
         self.tid = 0
 
     def _recv(self, n):
@@ -60,8 +61,8 @@ class TcpTransport:
 
 
 class RtuTransport:
-    def __init__(self, port, baud, parity="N", timeout=0.3):
-        self.ser = open_serial(port, baud, parity, timeout)
+    def __init__(self, port, baud, parity="N", timeout=0.3, rs485=False):
+        self.ser = open_serial(port, baud, parity, timeout, rs485)
         self.ser.inter_byte_timeout = 0.03
 
     def request(self, unit, pdu):
@@ -164,9 +165,9 @@ def scan(ctx: Context):
 
 def scan_serial(ctx: Context, spec: SerialSpec):
     for baud in spec.bauds or [9600, 19200]:
-        for parity in (spec.parity or "N", ) if spec.parity else ("N", "E"):
-            ctx.log("modbus-rtu %s %d%s8-1" % (spec.port, baud, parity))
-            t = RtuTransport(spec.port, baud, parity)
+        for parity in (spec.parity,) if spec.parity else ("N", "E"):
+            ctx.log("modbus-rtu %s %d baud parity %s" % (spec.port, baud, parity))
+            t = RtuTransport(spec.port, baud, parity, rs485=ctx.rs485)
             try:
                 hits = sum(scan_unit(t, u, spec.port, "Modbus RTU", ctx) for u in ctx.modbus_units)
             finally:

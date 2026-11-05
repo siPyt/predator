@@ -1,4 +1,4 @@
-from . import bacnet, modbus, mqtt, others, profibus, profinet, siemens_p1
+from . import bacnet, modbus, mqtt, others, profibus, profinet
 
 # name -> scanner(ctx) for IP / layer-2 protocols
 IP_SCANNERS = {
@@ -18,5 +18,4 @@ SERIAL_SCANNERS = {
     "modbus-rtu": modbus.scan_serial,
     "bacnet-mstp": bacnet.scan_serial,
     "profibus": profibus.scan_serial,
-    "siemens-p1": siemens_p1.scan_serial,
 }
