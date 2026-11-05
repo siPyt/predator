@@ -30,21 +30,14 @@ class PortState:
     stopbits: int = 1
     bytesize: int = 8
     devices: list = dataclasses.field(default_factory=list)  # mstp device instances or modbus unit ids
+    # mstp device_instance -> [{"type","instance","name"}, ...] from bacepics (gateway/mstp.py
+    # dump_device()) - the actual BACnet object addresses needed to configure points into a BMS
+    # (e.g. Insight/Apogee), not just "a device is out there". Modbus has no equivalent self-
+    # describing object list, so this stays empty for modbus-rtu ports.
+    device_objects: dict = dataclasses.field(default_factory=dict)
     last_scan: float = 0.0
     last_confirmed: float = 0.0
     note: str = ""
-
-    def as_row_dicts(self):
-        """One dict per discovered device/unit on this port, for the CSV."""
-        rows = []
-        for d in self.devices:
-            rows.append({
-                "source": self.protocol if self.protocol != UNKNOWN else "serial-unknown",
-                "bus_or_network": self.port,
-                "address": d,
-                "baud": self.baud if self.protocol != UNKNOWN else "",
-            })
-        return rows
 
 
 @dataclasses.dataclass

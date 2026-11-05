@@ -80,6 +80,24 @@ def _detect_modbus(cfg, port, bauds, quick_units, deep_max_unit, timeout):
     return None, []
 
 
+def _dump_mstp_devices(cfg, port, baud, devices):
+    """Enumerate each found MS/TP device's object list (bacepics) - this is
+    the actual BACnet object type/instance/name a BMS integrator needs to
+    configure a point, not just "device 5 exists". Best-effort: a device that
+    fails to dump still ends up in the CSV, just without a per-object
+    breakdown (see csv_export.py's fallback)."""
+    device_objects = {}
+    for inst in devices:
+        try:
+            result = mstp.dump_device(cfg, inst, iface=port, baud=baud)
+            device_objects[inst] = result.get("objects") or []
+            log.info("%s: device %s -> %d object(s)", port, inst, len(device_objects[inst]))
+        except Exception:  # noqa: BLE001
+            log.exception("error dumping object list for MS/TP device %s on %s", inst, port)
+            device_objects[inst] = []
+    return device_objects
+
+
 def detect_port(cfg, port):
     """Run one full auto-detect pass on `port` and update runtime_state."""
     bauds = cfgmod.autodetect_scan_bauds(cfg)
@@ -93,8 +111,9 @@ def detect_port(cfg, port):
     if cfgmod.getboolean(cfg, "mstp", "enabled"):
         baud, devices = _detect_mstp(cfg, port, bauds, mstp_timeout)
         if devices:
+            device_objects = _dump_mstp_devices(cfg, port, baud, devices)
             STATE.set_port_state(
-                port, protocol=MSTP, baud=baud, devices=devices,
+                port, protocol=MSTP, baud=baud, devices=devices, device_objects=device_objects,
                 last_scan=time.time(), last_confirmed=time.time(),
                 note=f"{len(devices)} MS/TP device(s)",
             )

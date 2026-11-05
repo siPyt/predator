@@ -38,13 +38,30 @@ def _serial_rows():
                 "writable": "", "last_seen": _fmt_ts(state.last_scan),
             })
             continue
+        last_seen = _fmt_ts(state.last_confirmed or state.last_scan)
         for dev in state.devices:
-            rows.append({
-                "source": state.protocol, "bus_or_network": f"{state.port}@{state.baud}",
-                "address": dev, "object_or_register": "", "data_type": "",
-                "description": state.note, "value": "", "units": "",
-                "writable": "", "last_seen": _fmt_ts(state.last_confirmed or state.last_scan),
-            })
+            objects = (state.device_objects or {}).get(dev) or []
+            if not objects:
+                # Modbus has no self-describing object list, or MS/TP's
+                # bacepics dump failed/returned nothing - still report the
+                # device itself so it's not silently missing from the CSV.
+                rows.append({
+                    "source": state.protocol, "bus_or_network": f"{state.port}@{state.baud}",
+                    "address": dev, "object_or_register": "", "data_type": "",
+                    "description": state.note, "value": "", "units": "",
+                    "writable": "", "last_seen": last_seen,
+                })
+                continue
+            # One row per real BACnet object - this is the device-instance +
+            # object-type:instance pair you need to add a point for this into
+            # a BMS (e.g. Insight/Apogee) or into predator's own points-map.
+            for obj in objects:
+                rows.append({
+                    "source": state.protocol, "bus_or_network": f"{state.port}@{state.baud}",
+                    "address": dev, "object_or_register": f"{obj.get('type')}:{obj.get('instance')}",
+                    "data_type": "", "description": obj.get("name", ""), "value": "",
+                    "units": "", "writable": "", "last_seen": last_seen,
+                })
     return rows
 
 

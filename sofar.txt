@@ -628,3 +628,17 @@ NOT YET DONE / NEXT STEPS
 - Deliberately deferred (not a bug, a scope choice): BACnet/IP discovery records that a
   device exists (instance/address/vendor/max-APDU) but doesn't walk its object list yet.
 
+UPDATE (same day, later): CSV ENRICHED FOR BMS POINT ENTRY (Insight/Apogee)
+- User's actual end goal: use the discovered-points CSV to manually configure points into
+  an Insight/Apogee BMS so it can talk to whatever predator finds. A bare "MS/TP device 5
+  found" row isn't enough for that - you need the real BACnet object type:instance (and
+  name) to configure a point anywhere.
+- Fix: gateway/discovery.py now calls mstp.dump_device() (bacepics) on every MS/TP device
+  found during auto-detect, enumerating its full object list; gateway/csv_export.py now
+  emits one CSV row per object (device instance + object type:instance + object name),
+  not just one row per device. Modbus RTU has no equivalent self-describing object list
+  (no protocol-level way to know register meaning without the device's own documentation),
+  so Modbus rows stay unit-level for now.
+- Deployed to the already-running Pi mid-scan (service restarted with the new code while
+  the user's RS-485 adapter was plugged in and the unattended discovery window was active).
+
