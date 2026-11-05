@@ -32,13 +32,20 @@ def _run(cmd, timeout, env):
         return 1, "", str(e)
 
 
-def _env(cfg, baud=None):
+def _env(cfg, baud=None, iface=None):
+    """Build the bacnet-stack CLI environment.
+
+    `iface`/`baud` default to the configured [mstp] values, but can be
+    overridden so gateway/discovery.py can probe an arbitrary /dev/ttyUSB*
+    port at an arbitrary baud during auto-detection, without needing a
+    dedicated cfg section per port.
+    """
     s = cfg["mstp"]
     env = os.environ.copy()
     env.update({
         "BACNET_DATALINK": "mstp",
-        "BACNET_IFACE": s["iface"],
-        "BACNET_MSTP_IFACE": s["iface"],
+        "BACNET_IFACE": iface or s["iface"],
+        "BACNET_MSTP_IFACE": iface or s["iface"],
         "BACNET_MSTP_BAUD": str(baud or s["baud"]),
         "BACNET_MSTP_MAC": s["our_mac"],
         "BACNET_MAX_MASTER": s["max_master"],
@@ -67,25 +74,42 @@ def _parse_devices(text):
     return devices
 
 
-def whois(cfg, timeout=8):
-    """Who-Is sweep at the configured baud. Returns discovered device instances."""
+def whois(cfg, timeout=8, iface=None, baud=None):
+    """Who-Is sweep at the configured (or overridden) iface/baud.
+
+    Returns discovered device instances. `iface`/`baud` let
+    gateway/discovery.py point this at any /dev/ttyUSB* port during
+    auto-detection instead of only the one fixed in [mstp].
+    """
     tool = _tool(cfg, "bacwi")
     if not os.path.exists(tool):
         return {"devices": [], "error": "bacnet-stack not built", "ts": time.time()}
-    rc, so, se = _run([tool], timeout=timeout, env=_env(cfg))
+    rc, so, se = _run([tool], timeout=timeout, env=_env(cfg, baud, iface))
     if rc not in (0, 124):
         return {"devices": [], "error": se or f"exit {rc}", "ts": time.time()}
     return {"devices": _parse_devices(so), "ts": time.time()}
 
 
-def bus_scan(cfg):
+def probe_port(cfg, iface, baud, timeout=None):
+    """Single-baud MS/TP presence check on an arbitrary port, for discovery.py.
+
+    Returns {"devices": [...], "error": str|None}. Any non-empty device list
+    means something answered a Who-Is as BACnet MS/TP at this iface/baud.
+    """
+    from .config import autodetect_mstp_probe_timeout
+    timeout = timeout or autodetect_mstp_probe_timeout(cfg)
+    result = whois(cfg, timeout=timeout, iface=iface, baud=baud)
+    return {"devices": result.get("devices", []), "error": result.get("error")}
+
+
+def bus_scan(cfg, iface=None):
     """Sweep common baud rates to find the trunk's actual speed."""
     tool = _tool(cfg, "bacwi")
     if not os.path.exists(tool):
         return {"results": [], "error": "bacnet-stack not built", "ts": time.time()}
     results, best = [], None
     for b in SWEEP_BAUDS:
-        rc, so, se = _run([tool], timeout=12, env=_env(cfg, b))
+        rc, so, se = _run([tool], timeout=12, env=_env(cfg, b, iface))
         text = (so or "") + "\n" + (se or "")
         m = _TOTAL_RE.search(text)
         devices = _parse_devices(so)
@@ -97,25 +121,25 @@ def bus_scan(cfg):
     return {"results": results, "best_baud": best, "note": note, "ts": time.time()}
 
 
-def read_property(cfg, device_instance, obj_type, obj_inst, prop="present-value", timeout=5):
+def read_property(cfg, device_instance, obj_type, obj_inst, prop="present-value", timeout=5, iface=None, baud=None):
     tool = _tool(cfg, "bacrp")
     if not os.path.exists(tool):
         raise MstpError("bacnet-stack not built")
     cmd = [tool, str(device_instance), obj_type, str(obj_inst), prop]
-    rc, so, se = _run(cmd, timeout=timeout, env=_env(cfg))
+    rc, so, se = _run(cmd, timeout=timeout, env=_env(cfg, baud, iface))
     if rc != 0:
         raise MstpError(se or f"bacrp exit {rc}")
     return _coerce(so)
 
 
-def write_property(cfg, device_instance, obj_type, obj_inst, value, priority=8, prop="present-value", timeout=5):
+def write_property(cfg, device_instance, obj_type, obj_inst, value, priority=8, prop="present-value", timeout=5, iface=None, baud=None):
     tool = _tool(cfg, "bacwp")
     if not os.path.exists(tool):
         raise MstpError("bacnet-stack not built")
     # bacwp <device-id> <obj-type> <obj-instance> <prop> <priority> <index> <tag> <value>
     # tag 4 = REAL; callers pass pre-formatted numeric values.
     cmd = [tool, str(device_instance), obj_type, str(obj_inst), prop, str(priority), "-1", "4", str(value)]
-    rc, so, se = _run(cmd, timeout=timeout, env=_env(cfg))
+    rc, so, se = _run(cmd, timeout=timeout, env=_env(cfg, baud, iface))
     if rc != 0:
         raise MstpError(se or f"bacwp exit {rc}")
     return True
@@ -136,12 +160,12 @@ _EPICS_OBJ_RE = re.compile(
 )
 
 
-def dump_device(cfg, device_instance, timeout=20):
+def dump_device(cfg, device_instance, timeout=20, iface=None, baud=None):
     """YABE-style object list for a device, via bacepics. Best-effort EPICS parsing."""
     tool = _tool(cfg, "bacepics")
     if not os.path.exists(tool):
         return {"objects": [], "error": "bacnet-stack not built", "ts": time.time()}
-    rc, so, se = _run([tool, str(device_instance)], timeout=timeout, env=_env(cfg))
+    rc, so, se = _run([tool, str(device_instance)], timeout=timeout, env=_env(cfg, baud, iface))
     if rc != 0:
         return {"objects": [], "error": se or f"bacepics exit {rc}", "ts": time.time()}
     objects = []

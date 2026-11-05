@@ -348,3 +348,283 @@ PROGRESS LOG (updated as work proceeds)
   systemd unit, start the service, and verify: service starts cleanly with no RS-485
   hardware attached yet (graceful errors, not crashes), REST API responds, BACnet/IP
   virtual device answers a local Who-Is.
+
+
+CHAPTER 6 - PREDATOR STILL DROPPING; RE-VERIFIED THE FIX ON alpha-p (PAMS) (2026-11-05)
+=========================================================================================
+
+SYMPTOM REPORTED
+- Despite the Chapter 4 fix being applied and verified on predator, the user now reports
+  predator's Ethernet still drops roughly every 5-10 minutes and needs the cable physically
+  unplugged and replugged to reconnect - not just time passing.
+- At the time of this check the Ethernet cable was on the PAMS Pi (alpha-p), not predator,
+  so predator (192.168.1.50) was confirmed offline (100% ping loss) - this check is a
+  re-verification of alpha-p only, nothing was touched on predator.
+
+RE-VERIFIED alpha-p's ACTUAL CURRENT CONFIG (fresh SSH session, admin@192.168.1.10)
+- /etc/NetworkManager/dispatcher.d/50-eth0-stable is byte-for-byte unchanged from Chapter 4
+  (755, root:root).
+- Confirmed it is genuinely in effect: `ethtool eth0` -> Auto-negotiation: on, Advertised
+  link modes: 100baseT/Full ONLY (the script's primary "advertise 0x008" branch, not the
+  hard-force fallback), Speed: 100Mb/s, Duplex: Full. `ethtool --show-eee eth0` -> EEE
+  status: disabled.
+- dmesg (this boot, ~8 min uptime) shows the link settle exactly once: Up-1Gbps -> Down ->
+  Up-100Mbps-Full, then silence - no recurring flaps.
+- Checked for any OTHER mechanism that could explain alpha-p's stability, not just the
+  dispatcher script:
+    - /etc/NetworkManager/conf.d/ is empty - no global NM overrides.
+    - dispatcher.d/pre-up.d, pre-down.d, no-wait.d are all empty - no other hooks.
+    - The eth0 NM connection profile itself ("netplan-eth0") has speed=0, duplex unset,
+      auto-negotiate=no, wake-on-lan unset - i.e. NM's connection profile forces nothing;
+      100% of the fix is the dispatcher script, no hidden second mechanism.
+    - crontab has `pi-netwatch.sh` (@reboot) - this is a PASSIVE logger (CSV of
+      vcgencmd throttled/voltage, carrier state, gateway ping) for diagnosing drops
+      after the fact. It does NOT reset or repair the interface. (Other @reboot entries -
+      pams_watchdog.py, pams_gateway.py, pams_battery.py, pams_rtc.py, a poller script -
+      are PAMS application processes, unrelated to network stability.)
+- CONCLUSION: no hidden extra fix exists on alpha-p. The Chapter 4 dispatcher script is
+  the entire mechanism and is confirmed still working exactly as designed.
+
+WHY THIS MATTERS FOR PREDATOR
+- Chapter 4 already copied this exact script to predator and verified speed=100/duplex=full
+  right after applying it. alpha-p's one link flap at boot recovered BY ITSELF with no
+  human action. A link that will NOT come back without a physical unplug/replug is a
+  different failure mode than "autonegotiation picked 1000baseT and failed" (which is what
+  the dispatcher script fixes) - it points toward one of:
+    1. The dispatcher script on predator did not actually persist (reverted, wrong
+       permissions/filename, edited since Chapter 4) - needs re-checking, not re-explaining.
+    2. A physical-layer problem specific to predator's cable/port/connector.
+    3. A power problem (brown-out) on predator - Chapter 1 saw the red power LED go off
+       during a drop; Chapter 3's "no throttling" check was a different observation window;
+       Chapter 5 has since added USB-RS485 adapters whose extra current draw hasn't been
+       load-tested.
+
+NEXT STEPS WHEN PREDATOR IS RECONNECTED (verify before re-applying anything)
+1. Immediately after plugging in and getting SSH back, run:
+     cat /etc/NetworkManager/dispatcher.d/50-eth0-stable   (exists, matches alpha-p
+       word-for-word, mode 755?)
+     /usr/sbin/ethtool eth0                  (Auto-negotiation/Advertised modes/Speed/Duplex)
+     /usr/sbin/ethtool --show-eee eth0       (EEE status should be disabled)
+     vcgencmd get_throttled                  (0x0 = no under-voltage right now)
+2. Without touching the cable, wait for the next drop and capture:
+     dmesg -T | tail -40                     (once/if it answers again by itself)
+     vcgencmd get_throttled                  (ideally checked right as it drops, to catch
+       a transient under-voltage flag, e.g. 0x50005, before it clears)
+   - If it starts answering ping again on its own (no replug), that is a software link-
+     renegotiation issue after all.
+   - If it truly stays dead until the cable is physically reseated, that points to a
+     physical-layer or power issue that ethtool/dispatcher settings cannot fix - next
+     would be swapping the cable, trying a different PC port, and watching the red LED
+     through a drop.
+3. Only re-copy the dispatcher script if step 1 shows it is missing, different, or not
+   executable.
+
+
+CHAPTER 7 - ROOT CAUSE + PERMANENT FIX DEPLOYED ON PREDATOR (2026-11-05)
+=========================================================================
+
+ROOT CAUSE (confirmed live, with predator plugged in and dropping every ~2-5 min)
+- The Chapter 4 dispatcher script (/etc/NetworkManager/dispatcher.d/50-eth0-stable) was
+  still present on predator, unchanged, correct permissions - but its fix was NOT actually
+  in effect: `ethtool eth0` showed Speed 1000Mb/s, full advertised modes, EEE enabled.
+- Live-observed pattern (passive monitoring, cable untouched): predator goes unreachable
+  (no ping, no ARP reply) for ~1.5-2 min while the PC's own NIC still reports
+  "Connected" the whole time, then the PC's NIC very briefly flickers Disconnected/
+  Connected (a real PHY autonegotiation re-train), and predator answers again - still
+  stuck back at 1000Mb/s/EEE-on, so it repeats a few minutes later. A manual physical
+  unplug/replug produces the same result: relinks at 1000Mb/s, not the fixed 100Mb/s.
+- CONCLUSION: the dispatcher script's commands work fine when run manually (verified:
+  `ethtool -s eth0 autoneg on advertise 0x008` + `ethtool --set-eee eth0 eee off`
+  immediately produce Speed 100Mb/s/Full, Advertised=100baseT/Full only, EEE disabled -
+  identical to alpha-p). The bug is that NetworkManager's dispatcher only re-runs
+  50-eth0-stable on its own logical events (up/hostname/dhcp4-change/connectivity-change),
+  and predator's PHY-level autonegotiation re-train flaps were NOT causing any of those
+  NM events to fire - so the restriction "fell off" after every flap and eth0 drifted
+  back to unstable full-gigabit autonegotiation, which is the original marginal-link
+  problem from Chapter 4, recurring every few minutes.
+
+PERMANENT FIX DEPLOYED
+- New files (root:root):
+    /usr/local/sbin/eth0-stable-watch.sh       - loops on `ip monitor link` (reads the
+                                                  kernel's own netlink link-state
+                                                  broadcasts directly - NOT NetworkManager)
+                                                  and re-applies autoneg on/advertise 0x008
+                                                  + eee off every single time eth0 reports
+                                                  "state UP", logging via `logger -t
+                                                  eth0-stable-watch` (see journalctl -t
+                                                  eth0-stable-watch). Applies once
+                                                  immediately on its own start too.
+    /etc/systemd/system/eth0-stable-watch.service - Type=simple, Restart=always,
+                                                  enabled + started.
+- GOTCHA HIT DURING DEPLOY: the script was authored on Windows and scp'd over with CRLF
+  line endings, which broke the `#!/bin/sh` shebang (systemd EXEC error 203 / "No such
+  file or directory"). Fixed with `sed -i 's/\r$//' ...sh` on the Pi. Remember this for
+  any future file authored locally and copied to the Pi: convert to LF first (or fix
+  with sed after copying) before it's made executable/run on Linux.
+- VERIFIED: `systemctl status eth0-stable-watch.service` -> active (running), with
+  `ip monitor link` as a live child process. `journalctl -t eth0-stable-watch` shows
+  "applied 100-Full/EEE-off (speed now: 100Mb/s)" immediately after start. The old
+  Chapter-4 dispatcher script was left in place too (harmless/redundant, still fires on
+  genuine NM events) - the new watcher is now the primary, reliable mechanism since it
+  reacts to the actual kernel link state instead of NetworkManager's interpretation of it.
+- NOT YET DONE: has not been watched through a full natural flap cycle to directly time
+  how fast the watcher reacts (expected ~1s, vs. the ~1.5-2 min the link previously sat
+  broken). If predator still drops noticeably after this, next check is
+  `journalctl -t eth0-stable-watch -f` live during a drop to see whether it's firing at
+  all and what speed it's correcting from/to.
+- Also now tracked in the repo (not just live on the Pi), so a re-image doesn't lose it:
+  scripts/eth0-stable-watch.sh and systemd/eth0-stable-watch.service. Not auto-installed
+  by scripts/install.sh (that script targets the gateway app) - copy these two files into
+  place by hand the same way they were deployed here if setting up a fresh SD card.
+
+
+CHAPTER 8 - THE REAL DOMINANT CAUSE: eth0 WAS SET TO DHCP ON A LINK WITH NO DHCP SERVER
+=========================================================================================
+
+THE CLUE
+- User sent a phone photo of predator's own monitor (direct, not VNC) showing a repeating
+  desktop toast: "Requesting an ethernet network address for 'netplan-eth0' ... IP:
+  192.168.1.50" - and said it "keeps flashing this". A toast like that reappearing means
+  NetworkManager itself was repeatedly re-running IP configuration, not just a one-off PHY
+  blip.
+
+ROOT CAUSE (confirmed from journalctl -u NetworkManager over the full boot)
+- `device (eth0): state change: ip-config -> failed (reason 'ip-config-unavailable')`
+  was repeating like clockwork every ~45 seconds continuously, independent of the actual
+  cable state (NetworkManager's default DHCP timeout is 45s - exact match).
+- `nmcli connection show netplan-eth0` showed `ipv4.method: auto` (DHCP) with
+  `ipv4.addresses: 192.168.1.50/24` only as an ADDITIONAL address layered on top - i.e.
+  the connection's PRIMARY method was DHCP. predator's Ethernet is a direct point-to-point
+  cable to this PC with no DHCP server, so every ~45s NetworkManager: tried DHCP, timed
+  out, tore the whole connection down ("Activation: failed", state -> disconnected), then
+  autoconnect kicked in and it retried from scratch - repeating forever. The static
+  192.168.1.50 address only "stuck" during the brief windows between failures, which is
+  why ping/SSH worked intermittently rather than being reliably either up or down.
+- This is DIFFERENT FROM and MORE IMPACTFUL THAN the Chapter 4/7 gigabit-autonegotiation
+  issue: that one caused occasional 1-3 second PHY-level blips (now kept at 100Mb/Full by
+  Chapter 7's eth0-stable-watch.service); THIS one caused the multi-minute-long outages,
+  because the IP layer never stayed "activated" long enough between DHCP-timeout cycles.
+- Where it came from: /etc/netplan/90-NM-75a1216a-...yaml (confirmed via sudo cat) has
+  `dhcp4: true` plus the static address only as an NM "passthrough" extra. NOTE: on this
+  Pi image, files under /etc/netplan/90-NM-*.yaml are NetworkManager's AUTO-GENERATED
+  REFLECTION of its own connection profiles (for `netplan status` introspection), not a
+  source file - editing them directly would not stick. The actual fix has to go through
+  the live NetworkManager connection (nmcli), which NM then re-renders back into that
+  yaml and also persists for the next boot.
+
+FIX APPLIED AND VERIFIED
+   sudo nmcli connection modify netplan-eth0 ipv4.method manual \
+     ipv4.addresses 192.168.1.50/24 ipv6.method link-local
+   sudo nmcli connection up netplan-eth0
+- Result: `ipv4.method: manual` now (no DHCP attempted at all). Journal shows a single
+  clean transition prepare -> config -> ip-config -> ip-check -> secondaries -> activated
+  in under 0.2 seconds, "Activation: successful, device activated." `nmcli device show
+  eth0` -> GENERAL.STATE: 100 (connected), held stable afterward with no further
+  "ip-config -> failed" entries.
+- This should be the fix that actually stops the "every 5-10 minutes" symptom; Chapter 7's
+  watcher service remains in place to keep the PHY itself from drifting back to unstable
+  gigabit on top of this.
+- NOT YET DONE: has not been watched over a long (hours) unattended period. If it still
+  drops after this, check `journalctl -u NetworkManager -f` live and look for a DIFFERENT
+  state-change reason than 'ip-config-unavailable' (would point to a third, separate
+  cause) versus the same reason recurring (would mean this fix did not fully take/persist
+  - re-check `nmcli connection show netplan-eth0 | grep ipv4.method` first).
+
+
+CHAPTER 9 - GATEWAY SOFTWARE: AUTO-DETECT + CSV + GUI VIEWER + API (2026-11-05)
+=================================================================================
+
+NEW SCOPE, CONFIRMED BY USER
+- Gateway must run entirely ON the Pi (not the PC): plug comms into the RJ45 (BACnet/IP)
+  or the USB-C-to-RS485 adapter (BACnet MS/TP or Modbus RTU), power the Pi on, and it
+  figures out the protocol and baud rate itself - no telling it what's plugged in.
+- Everything found gets written to a CSV, visible on the Pi's own GUI over VNC, and
+  downloadable to the PC.
+
+WHAT WAS BUILT (all local source so far - see gateway/, scripts/, systemd/, config/,
+README.md; nothing deployed to the Pi yet)
+- gateway/discovery.py: the auto-detect engine. Enumerates /dev/ttyUSB*/ttyACM*; per
+  port, tries BACnet MS/TP first across a baud sweep (Who-Is via bacnet-stack's bacwi -
+  reuses/extends mstp.py's existing bus_scan() logic rather than hand-rolling MS/TP frame
+  sniffing), then Modbus RTU (active register-read probes across a unit-id sweep, quick
+  pass first then a deeper 1..247 sweep if nothing common answers) if nothing answered as
+  MS/TP. Confirmed ports get a cheap periodic re-check so a swapped cable/adapter is
+  noticed without a restart.
+- gateway/runtime_state.py: thread-safe shared state (discovered serial ports incl.
+  protocol/baud/devices, discovered BACnet/IP devices, live points-map values) - the
+  single source of truth the poller/CSV/API all read, instead of the static config file.
+- gateway/mstp.py: refactored to accept iface/baud overrides (was hardcoded to the one
+  configured port) so discovery.py can probe any port, not just a fixed one.
+- gateway/modbus_rtu.py: added probe_port() - a throwaway-client single-read probe for
+  auto-detection, separate from the shared cached client used for real polling.
+- gateway/csv_export.py: builds the discovered-points CSV (serial finds + BACnet/IP
+  finds + curated points-map live values) and atomically writes it to [csv] path, mirrored
+  to [csv] desktop_copy (~/Desktop by default) for VNC/GUI visibility.
+- gateway/viewer.py: a small Tkinter window (ttk.Treeview table, re-reads the CSV every
+  few seconds) so the discovered points are visible on the Pi's desktop without needing
+  any spreadsheet app installed (standard Raspberry Pi OS Desktop doesn't ship one).
+  Autostarts on login via systemd/predator-viewer.desktop.in -> ~/.config/autostart/.
+- gateway/api.py: stdlib-only HTTP server on :8099 - GET /status (JSON), /points.json,
+  /export.csv (download - this is "get the CSV onto the PC": browse to
+  http://<predator-ip>:8099/export.csv or `curl -O`), POST /rescan.
+- gateway/service.py: the systemd entrypoint wiring discovery + BACnet/IP + the points
+  poller + csv export + the API together, with signal handling for clean shutdown.
+
+IMPORTANT CORRECTION DURING THIS WORK: classic bacpypes DOES NOT WORK ON THIS PI
+- Chapter 5 said bacpypes' BIPSimpleApplication/ReadWritePropertyServices had been
+  "verified against the installed bacpypes API" - that verification was about the
+  shape of the API, not about whether it actually runs on the target Python version.
+- Caught by actually installing it locally (not assumed): classic `bacpypes` imports
+  Python's `asyncore`/`asynchat` modules, which were REMOVED in Python 3.12. predator
+  is Debian trixie (Python 3.13) / at minimum 3.12+, so classic bacpypes cannot even be
+  imported there, let alone run. This would have been a dead end discovered only after
+  deploying to the Pi if not caught now.
+- FIX: switched to `bacpypes3` (the actively maintained asyncio-based rewrite). Rewrote
+  gateway/bacnet_ip.py against it. Every non-obvious bit of its API used here was
+  verified live in a local throwaway venv before writing the final code, not assumed:
+    - Application.from_args() (via SimpleArgumentParser) is the correct/robust way to
+      build the app - it sets up the NetworkPortObject + actual BACnet/IP UDP link layer;
+      manually constructing Application.from_object_list() does NOT set up networking.
+    - --address format confirmed as "<bind-ip>/<prefix>:<port>", e.g. "0.0.0.0/24:47808".
+    - Vendor id: any non-default vendor id CRASHES from_args() unless that vendor's
+      object/property classes are also fully registered (hit this directly: "AttributeError:
+      'str' object has no attribute 'items'" deep inside bacpypes3's own object.py). Fixed
+      by defaulting [bacnet_ip] vendor_id to 999 - ASHRAE's reserved id for exactly this
+      (custom/unregistered device) - instead of the arbitrary 15 Chapter 5 had picked.
+    - Application.from_args()/who_is()/do_WritePropertyRequest all require/are coroutines -
+      confirmed "RuntimeError: no running event loop" when called outside asyncio.run().
+      So gateway/bacnet_ip.py's whole flow runs in ONE dedicated thread via asyncio.run(),
+      not the blocking bacpypes.core.run() pattern Chapter 5 assumed.
+    - who_is() returns the I-Am responses directly as a plain list (confirmed by awaiting
+      it live) - no separate do_IAmRequest handler override needed for discovery.
+    - Local objects are keyed by a bacpypes3.primitivedata.ObjectIdentifier instance, NOT
+      a plain (type, instance) tuple - confirmed a bare-tuple lookup silently returns None;
+      every get_object_id() call here wraps with ObjectIdentifier(...).
+    - do_WritePropertyRequest override uses instance monkey-patching (capturing the
+      original bound method, since from_args() returns a plain Application, not a
+      subclass) - confirmed this calling pattern works live.
+  Because the points-poller runs on a different thread than bacnet_ip's asyncio loop,
+  value updates go through loop.call_soon_threadsafe() (see gateway/service.py) rather
+  than touching bacpypes3 objects directly from another thread.
+
+LOCAL VERIFICATION DONE (no Pi needed for any of this)
+- python -m py_compile on every gateway/*.py module: clean.
+- A throwaway local venv with the real pymodbus/bacpypes3 installed (not just syntax
+  checking): config/points/runtime_state/csv_export logic smoke-tested directly; then
+  `python -m gateway.service` actually started end-to-end (BACnet/IP virtual device up,
+  auto-detect loop up, API up) and `curl localhost:8099/status` + `/export.csv` both
+  returned correct (empty, since no real hardware on this PC) results. Venv and stray
+  output files deleted afterward - nothing left behind on this PC.
+
+NOT YET DONE / NEXT STEPS
+- Nothing has been deployed to the Pi itself. Still needed once predator's network is
+  confirmed stable: check the Pi's actual python3 version/pip packages/internet
+  access/USB serial devices present, run scripts/build_bacnet_stack.sh (needs internet,
+  or transfer source+wheels from a machine that has it - see its own comments and
+  README.md), scripts/install.sh (venv, deps, systemd, autostart, adds the user to the
+  `dialout` group for serial access), then start predator-gateway and verify against
+  real MS/TP/Modbus RTU/BACnet-IP hardware - none of that has been exercised, only the
+  software's own logic and its "no hardware attached" startup path.
+- Deliberately deferred (not a bug, a scope choice): BACnet/IP discovery records that a
+  device exists (instance/address/vendor/max-APDU) but doesn't walk its object list yet.
+

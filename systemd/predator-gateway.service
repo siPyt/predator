@@ -1,0 +1,16 @@
+[Unit]
+Description=predator gateway - BACnet/IP + BACnet MS/TP + Modbus RTU auto-sensing gateway
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{USER}}
+WorkingDirectory={{REPO_DIR}}
+Environment=PREDATOR_GATEWAY_CONFIG=%h/predator_gateway.conf
+ExecStart={{VENV_DIR}}/bin/python -m gateway.service
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

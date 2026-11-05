@@ -140,3 +140,38 @@ def probe(cfg, unit, register_type, address, count=1, timeout=None):
     if rr is None or rr.isError():
         raise ModbusError(str(rr) if rr is not None else "no response")
     return rr.registers
+
+
+def probe_port(iface, baud, unit, parity="N", stopbits=1, bytesize=8, timeout=0.25):
+    """Single read attempt on an arbitrary port/baud/unit, for discovery.py.
+
+    Uses a short-lived client (NOT the shared `_get_client` cache) so
+    auto-detection can hammer many iface/baud/unit combinations quickly
+    without disturbing the operational connection used for the points map.
+    An exception response still counts as "something answered Modbus RTU
+    here" (valid framing + CRC), so this returns True for those too -
+    discovery.py only needs to know a unit is present, not what it has.
+    """
+    client = ModbusSerialClient(
+        port=iface, baudrate=baud, parity=parity, stopbits=stopbits,
+        bytesize=bytesize, timeout=timeout,
+    )
+    try:
+        if not client.connect():
+            return False
+        rr = client.read_holding_registers(address=0, count=1, device_id=unit)
+        # isError() is True for both a timeout/no-response AND a valid Modbus
+        # exception reply; distinguish them via exception_code, which is only
+        # set on a real (CRC-valid) exception response from a live unit.
+        if rr is None:
+            return False
+        if not rr.isError():
+            return True
+        return getattr(rr, "exception_code", None) is not None
+    except Exception:  # noqa: BLE001
+        return False
+    finally:
+        try:
+            client.close()
+        except Exception:  # noqa: BLE001
+            pass

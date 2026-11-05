@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=predator CSV viewer
+Comment=Live table of predator's discovered BACnet/Modbus points
+Exec={{VENV_DIR}}/bin/python -m gateway.viewer
+X-GNOME-Autostart-enabled=true

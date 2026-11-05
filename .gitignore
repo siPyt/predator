@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*-venv/
+predator_gateway.conf
+predator_points.json
+predator_discovered.csv

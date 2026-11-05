@@ -1,0 +1,13 @@
+[Unit]
+Description=Keep eth0 locked to 100baseT-Full / EEE off (predator Ethernet stability fix)
+After=network-pre.target
+Before=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/eth0-stable-watch.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
