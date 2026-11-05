@@ -30,6 +30,7 @@ from . import config as cfgmod
 
 REFRESH_MS = 3000
 API_BASE = "http://localhost:8099"
+ICON_PATH = os.path.join(os.path.dirname(__file__), "assets", "predator-icon.png")
 
 # Dark, high-contrast theme - the "cool hacker-tool" look this was asked for,
 # without needing any image/theme package beyond what ttk already ships with.
@@ -52,6 +53,18 @@ def _api_post(path, payload):
     )
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read().decode("utf-8"))
+
+
+def _set_window_icon(root):
+    """Best-effort - a missing/unreadable icon file should never stop the
+    app from starting. ICON_PATH resolves relative to this package so it
+    works regardless of where predator is installed."""
+    try:
+        icon = tk.PhotoImage(file=ICON_PATH)
+        root.iconphoto(True, icon)
+        root._predator_icon_ref = icon  # keep a reference - Tk drops unreferenced images
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _apply_dark_theme(root):
@@ -213,6 +226,7 @@ def main():
     root.title("predator gateway explorer")
     root.geometry("1100x600")
     _apply_dark_theme(root)
+    _set_window_icon(root)
 
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True)

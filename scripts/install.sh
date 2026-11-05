@@ -43,9 +43,23 @@ mkdir -p "$HOME/.config/autostart"
 sed "s#{{VENV_DIR}}#$VENV_DIR#g; s#{{REPO_DIR}}#$REPO_DIR#g" \
   "$REPO_DIR/systemd/predator-viewer.desktop.in" > "$HOME/.config/autostart/predator-viewer.desktop"
 
+echo "-- application menu entry + top-panel launcher icon (so closing the window doesn't lose it) --"
+mkdir -p "$HOME/.local/share/applications"
+sed "s#{{VENV_DIR}}#$VENV_DIR#g; s#{{REPO_DIR}}#$REPO_DIR#g" \
+  "$REPO_DIR/systemd/predator-gateway-app.desktop.in" > "$HOME/.local/share/applications/predator-gateway.desktop"
+mkdir -p "$HOME/.config/wf-panel-pi"
+if [ -f "$HOME/.config/wf-panel-pi/wf-panel-pi.ini" ] && grep -q '^launchers=' "$HOME/.config/wf-panel-pi/wf-panel-pi.ini"; then
+  sed -i '/^launchers=/ s/$/ predator-gateway/' "$HOME/.config/wf-panel-pi/wf-panel-pi.ini"
+else
+  { echo "[panel]"; echo "launchers=x-www-browser pcmanfm x-terminal-emulator predator-gateway"; } \
+    >> "$HOME/.config/wf-panel-pi/wf-panel-pi.ini"
+fi
+pkill -f /usr/bin/wf-panel-pi 2>/dev/null || true  # lwrespawn restarts it, picking up the new launcher
+
 echo "== done =="
 echo "Start the gateway now with:   sudo systemctl start predator-gateway"
 echo "Watch it with:                journalctl -u predator-gateway -f"
 echo "Status/CSV download API on:   http://<predator-ip>:8099/"
 echo "The CSV viewer window appears next time you log into the Pi's desktop"
 echo "(or VNC in now and run: $VENV_DIR/bin/python -m gateway.viewer)"
+echo "A Predator Gateway icon is now in the top panel - click it any time you close the window."
