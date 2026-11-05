@@ -78,6 +78,11 @@ _DEFAULTS = {
         "desktop_copy": "~/Desktop/predator_discovered.csv",
         "write_seconds": "5",
     },
+    "overrides": {
+        # Manual per-port troubleshooting overrides set from the explorer GUI
+        # (gateway/viewer.py) - persisted here so they survive a restart.
+        "path": "~/predator_overrides.json",
+    },
     "api": {
         "port": "8099",
     },
@@ -170,3 +175,7 @@ def csv_desktop_copy_path(cfg):
 
 def csv_write_seconds(cfg):
     return cfg.getfloat("csv", "write_seconds")
+
+
+def overrides_path(cfg):
+    return os.path.expanduser(cfg["overrides"]["path"])

@@ -55,12 +55,12 @@ def _detect_mstp(cfg, port, bauds, timeout):
     return None, []
 
 
-def _modbus_unit_sweep(port, baud, max_unit, timeout, seed=None):
+def _modbus_unit_sweep(port, baud, max_unit, timeout, seed=None, parity="N", stopbits=1, bytesize=8):
     found = {seed} if seed else set()
     for unit in range(1, max_unit + 1):
         if unit in found:
             continue
-        if modbus_rtu.probe_port(port, baud, unit, timeout=timeout):
+        if modbus_rtu.probe_port(port, baud, unit, parity=parity, stopbits=stopbits, bytesize=bytesize, timeout=timeout):
             found.add(unit)
     return sorted(found)
 
@@ -139,12 +139,62 @@ def detect_port(cfg, port):
     return {"port": port, "protocol": UNKNOWN, "baud": None, "devices": []}
 
 
+def detect_port_forced(cfg, port, protocol, baud, parity="N", stopbits=1, bytesize=8):
+    """Apply a manual troubleshooting override directly - skips the baud/
+    protocol sweep entirely and just uses what the explorer GUI was told to
+    use. Still runs the same enrichment as normal auto-detect (Who-Is +
+    bacepics for MS/TP, a unit sweep at that one baud for Modbus) so the CSV
+    stays populated even when auto-detect itself didn't find it (e.g. a
+    non-standard baud outside the sweep list, or a flaky device)."""
+    mstp_timeout = cfgmod.autodetect_mstp_probe_timeout(cfg)
+    modbus_timeout = cfgmod.autodetect_modbus_probe_timeout(cfg)
+    deep_max_unit = cfgmod.autodetect_modbus_deep_max_unit(cfg)
+
+    if protocol == MSTP:
+        result = mstp.probe_port(cfg, port, baud, timeout=mstp_timeout)
+        devices = result["devices"]
+        device_objects = _dump_mstp_devices(cfg, port, baud, devices) if devices else {}
+        STATE.set_port_state(
+            port, protocol=MSTP, baud=baud, parity=parity, stopbits=stopbits, bytesize=bytesize,
+            devices=devices, device_objects=device_objects, last_scan=time.time(),
+            last_confirmed=time.time() if devices else 0.0,
+            note=f"forced MS/TP @ {baud}" + ("" if devices else " - no response yet, check wiring/baud"),
+        )
+        log.info("%s: forced MS/TP @ %s baud, devices=%s", port, baud, devices)
+        return {"port": port, "protocol": MSTP, "baud": baud, "devices": devices}
+
+    if protocol == MODBUS_RTU:
+        quick_units = cfgmod.autodetect_modbus_quick_units(cfg)
+        devices = [
+            u for u in quick_units
+            if modbus_rtu.probe_port(port, baud, u, parity=parity, stopbits=stopbits, bytesize=bytesize, timeout=modbus_timeout)
+        ]
+        if not devices:
+            devices = _modbus_unit_sweep(
+                port, baud, deep_max_unit, modbus_timeout, parity=parity, stopbits=stopbits, bytesize=bytesize,
+            )
+        STATE.set_port_state(
+            port, protocol=MODBUS_RTU, baud=baud, parity=parity, stopbits=stopbits, bytesize=bytesize,
+            devices=devices, last_scan=time.time(), last_confirmed=time.time() if devices else 0.0,
+            note=f"forced Modbus RTU @ {baud}" + ("" if devices else " - no response yet, check wiring/baud/parity"),
+        )
+        log.info("%s: forced Modbus RTU @ %s baud, units=%s", port, baud, devices)
+        return {"port": port, "protocol": MODBUS_RTU, "baud": baud, "devices": devices}
+
+    raise ValueError(f"unsupported forced protocol {protocol!r}")
+
+
 def _reverify(cfg, state):
     """Cheap re-check that a confirmed port still carries what we think it
     does. Downgrades to UNKNOWN (triggering a full rescan next loop) if not -
     this is what notices a swapped adapter/cable without needing a restart.
+    A port with an active manual override never gets downgraded to UNKNOWN
+    here (that would silently abandon the override) - it just gets a note
+    that it's not currently responding, and stays pinned until the user
+    clears the override themselves.
     """
     port, baud = state.port, state.baud
+    override = STATE.get_override(port)
     if state.protocol == MSTP:
         result = mstp.probe_port(cfg, port, baud, timeout=cfgmod.autodetect_mstp_probe_timeout(cfg))
         still_there = bool(result["devices"])
@@ -158,18 +208,31 @@ def _reverify(cfg, state):
         return
     if still_there:
         state.last_confirmed = time.time()
+    elif override is not None:
+        state.note = f"forced {state.protocol} @ {baud} - not responding right now"
+        state.last_scan = time.time()
     else:
         log.info("%s: %s no longer responding at %s baud - will rescan", port, state.protocol, baud)
         STATE.set_port_state(port, protocol=UNKNOWN, baud=0, devices=[], last_scan=time.time())
 
 
 def force_rescan(cfg, port=None):
-    """Used by the HTTP API's rescan trigger. `port=None` rescans everything."""
+    """Used by the HTTP API's rescan trigger. `port=None` rescans everything.
+    A port with an active manual override gets that override re-applied
+    instead of reverting to auto-detect - "rescan" should not silently
+    discard a troubleshooting override."""
     ports = [port] if port else find_serial_ports(cfg)
     results = []
     for p in ports:
-        STATE.set_port_state(p, protocol=UNKNOWN, baud=0, devices=[])
-        results.append(detect_port(cfg, p))
+        override = STATE.get_override(p)
+        if override is not None:
+            results.append(detect_port_forced(
+                cfg, p, override.protocol, override.baud,
+                parity=override.parity, stopbits=override.stopbits, bytesize=override.bytesize,
+            ))
+        else:
+            STATE.set_port_state(p, protocol=UNKNOWN, baud=0, devices=[])
+            results.append(detect_port(cfg, p))
     return results
 
 
@@ -197,8 +260,19 @@ def run_loop(cfg, stop_event):
 
         for port in sorted(current_ports):
             state = STATE.get_port_state(port)
+            override = STATE.get_override(port)
             try:
-                if state is None or state.protocol == UNKNOWN:
+                if override is not None:
+                    # A new/changed override takes effect immediately rather
+                    # than waiting for the next periodic re-verify.
+                    if state is None or state.protocol != override.protocol or state.baud != override.baud:
+                        detect_port_forced(
+                            cfg, port, override.protocol, override.baud,
+                            parity=override.parity, stopbits=override.stopbits, bytesize=override.bytesize,
+                        )
+                    elif loop_count % _REVERIFY_EVERY_N_LOOPS == 0:
+                        _reverify(cfg, state)
+                elif state is None or state.protocol == UNKNOWN:
                     detect_port(cfg, port)
                 elif loop_count % _REVERIFY_EVERY_N_LOOPS == 0:
                     _reverify(cfg, state)

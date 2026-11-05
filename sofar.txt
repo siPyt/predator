@@ -478,6 +478,60 @@ PERMANENT FIX DEPLOYED
   place by hand the same way they were deployed here if setting up a fresh SD card.
 
 
+CHAPTER 10 - EXPLORER GUI (YABE-STYLE OVERRIDE CONTROLS) + PREDATOR DESKTOP THEME (2026-11-05)
+=================================================================================================
+
+WHAT WAS ADDED
+- Manual per-port troubleshooting overrides: gateway/runtime_state.py now has a
+  PortOverride store (persisted to ~/predator_overrides.json so it survives a restart).
+  gateway/discovery.py's run_loop checks for an override on every port before doing its
+  normal auto-sweep - an overridden port skips straight to the forced protocol/baud
+  (detect_port_forced()), still running the same enrichment (Who-Is + bacepics for MS/TP,
+  a unit sweep at that one baud for Modbus) so the CSV stays populated even when
+  auto-detect itself wouldn't have found it. _reverify() never silently downgrades an
+  overridden port back to auto - it stays forced until explicitly cleared.
+- gateway/api.py: GET /ports (every port + state + override + valid protocol/baud/parity
+  choices), POST /ports/override, POST /ports/auto. IMPORTANT FIX DURING THIS WORK: these
+  used to call discovery's scan functions directly and block the HTTP response until the
+  whole scan finished - a Modbus deep unit sweep can take over a minute, which would freeze
+  gateway/viewer.py's whole GUI window (the scan is called synchronously from its main
+  thread). Fixed by running the scan in a background thread and returning
+  {"accepted": true} immediately; the GUI's periodic 3s refresh picks up the real result
+  once the background scan finishes. Caught this by actually timing the API call (it was
+  still running after 90+ seconds) rather than assuming - re-verified the fix responds in
+  under half a second.
+- gateway/viewer.py rebuilt as a two-tab "explorer" (closer to what was asked for, a
+  YABE-style app): Discovered (the existing CSV table) and Serial Ports (one row per port,
+  shows the live auto-detect note, lets you pick Protocol/Baud/Parity and Apply, or pick
+  "auto" to clear an override) - calls gateway/api.py's /ports endpoints via stdlib
+  urllib, no new dependency. Also applied a dark theme (not just default Tk) since a
+  "cool, like Kali Linux" look was asked for.
+- Desktop wallpaper: generated an original dark/circuit-board "PREDATOR" themed image
+  (not the movie alien, not Kali's dragon - an original design, since those are someone
+  else's copyrighted/trademarked character art) and set it via
+  ~/.config/pcmanfm/default/desktop-items-{0,1}.conf (the system default lives at
+  /etc/xdg/pcmanfm/default/ - copying to the per-user config is what overrides it;
+  `pcmanfm --reconfigure` applies it live without a reboot). Verified with a real
+  screenshot (grim) over the existing SSH session.
+
+VERIFIED
+- Override set -> state shows the forced protocol/baud with a clear note ("no response
+  yet, check wiring/baud/parity" when nothing answers) -> cleared -> reverts to auto,
+  confirmed via direct API calls (not just reading the code).
+- Explorer GUI launches cleanly (no traceback), dark theme + both tabs render correctly
+  (confirmed via screenshot). Wallpaper confirmed live via screenshot.
+- NOT independently re-confirmed after the background-thread fix: clicking the actual
+  Apply/Auto buttons in the GUI (vs. hitting the API directly, which was re-verified) -
+  the GUI calls the exact same endpoints with the same payload shape, so this is low risk,
+  but worth a real click-through next time the Pi is reachable.
+- Manually SSH-launching gateway.viewer for screenshots turned out to be unreliable (the
+  process dies a few seconds after the SSH session that started it ends - looks like
+  systemd-logind cleaning up the whole session's cgroup, which setsid/nohup/disown don't
+  escape). This is a limitation of that manual testing method only - the real launch path
+  (XDG autostart at actual desktop login, already installed) is a normal persistent
+  session, not an ephemeral SSH one, so it is not expected to be affected.
+
+
 CHAPTER 8 - THE REAL DOMINANT CAUSE: eth0 WAS SET TO DHCP ON A LINK WITH NO DHCP SERVER
 =========================================================================================
 

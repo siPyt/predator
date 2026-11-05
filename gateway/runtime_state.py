@@ -13,6 +13,8 @@ plenty fast.
 """
 
 import dataclasses
+import json
+import os
 import threading
 import time
 
@@ -41,6 +43,23 @@ class PortState:
 
 
 @dataclasses.dataclass
+class PortOverride:
+    """A manual "force this port to be X" setting from the explorer GUI, for
+    troubleshooting when auto-detect doesn't land on what you expect (e.g. a
+    non-standard baud, or a device that doesn't answer Who-Is reliably).
+    Persisted to disk (see load/save below) so it survives a service restart -
+    this is meant to stick until someone clears it, not just for one session.
+    """
+    port: str
+    protocol: str                    # "mstp" | "modbus-rtu"
+    baud: int
+    parity: str = "N"
+    stopbits: int = 1
+    bytesize: int = 8
+    set_at: float = 0.0
+
+
+@dataclasses.dataclass
 class BacnetIpDevice:
     device_instance: int
     address: str
@@ -56,6 +75,7 @@ class RuntimeState:
     def __init__(self):
         self._lock = threading.RLock()
         self._ports = {}         # port path -> PortState
+        self._overrides = {}     # port path -> PortOverride
         self._bacnet_ip = {}     # device_instance -> BacnetIpDevice
         self._point_values = {}  # point name -> {"value", "error", "ts"}
 
@@ -90,6 +110,28 @@ class RuntimeState:
                 if state.protocol == protocol:
                     return state
             return None
+
+    # ---- manual overrides (explorer GUI troubleshooting) ----
+
+    def set_override(self, port, protocol, baud, parity="N", stopbits=1, bytesize=8):
+        with self._lock:
+            self._overrides[port] = PortOverride(
+                port=port, protocol=protocol, baud=baud, parity=parity,
+                stopbits=stopbits, bytesize=bytesize, set_at=time.time(),
+            )
+            return self._overrides[port]
+
+    def clear_override(self, port):
+        with self._lock:
+            self._overrides.pop(port, None)
+
+    def get_override(self, port):
+        with self._lock:
+            return self._overrides.get(port)
+
+    def all_overrides(self):
+        with self._lock:
+            return dict(self._overrides)
 
     # ---- BACnet/IP ----
 
@@ -129,6 +171,7 @@ class RuntimeState:
         with self._lock:
             return {
                 "ports": [dataclasses.asdict(s) for s in self._ports.values()],
+                "overrides": {p: dataclasses.asdict(o) for p, o in self._overrides.items()},
                 "bacnet_ip": [dataclasses.asdict(d) for d in self._bacnet_ip.values()],
                 "point_values": dict(self._point_values),
             }
@@ -136,3 +179,29 @@ class RuntimeState:
 
 # One process-wide instance; every module imports this same object.
 STATE = RuntimeState()
+
+
+def load_overrides(path):
+    """Restore manual port overrides from a previous run - call once at
+    service startup, before the discovery loop starts, so a troubleshooting
+    override set yesterday is still in effect today."""
+    path = os.path.expanduser(path)
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    for port, o in data.items():
+        STATE.set_override(
+            port, o["protocol"], o["baud"],
+            parity=o.get("parity", "N"), stopbits=o.get("stopbits", 1), bytesize=o.get("bytesize", 8),
+        )
+
+
+def save_overrides(path):
+    path = os.path.expanduser(path)
+    tmp = path + ".tmp"
+    data = {p: dataclasses.asdict(o) for p, o in STATE.all_overrides().items()}
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, path)

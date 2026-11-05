@@ -30,6 +30,7 @@ from . import csv_export
 from . import discovery
 from . import modbus_rtu
 from . import mstp
+from . import runtime_state
 from .points import load_points, parse_object
 from .runtime_state import STATE, MSTP, MODBUS_RTU
 
@@ -115,6 +116,7 @@ def _poll_points_loop(cfg, bacnet_handle, stop_event):
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     cfg = cfgmod.load_config()
+    runtime_state.load_overrides(cfgmod.overrides_path(cfg))
     stop_event = threading.Event()
     threads = []
 
