@@ -37,6 +37,9 @@ were reused from PAMS's proven field deployment, nothing else.
    `http://<predator-ip>:8099/export.csv` (or `curl -O`) - no file-transfer
    setup required. `http://<predator-ip>:8099/status` and `/points.json` are
    also there for live JSON state.
+6. **Excel + ICC Configuration Studio project, automatically:** whenever BACnet MS/TP points are found or change, the gateway writes an Excel point map (`Predator_Points.xlsx`) and an ICC Configuration Studio project for the Mirius's BACnet MS/TP client side (`Predator_Mirius_BACnet.icsproj`) to the Pi's Desktop (`[icc]` section). Open the project in ICC Configuration Studio, add the BMS side yourself (e.g. Siemens FLN Slave on Port B, using the same Database Addresses and the Excel's suggested point numbers/descriptors) and download to the Mirius. If you save your edits over the desktop project, the next refresh keeps your version as `... (saved <timestamp>).icsproj` instead of overwriting it. Set `[icc] default_mac`/`device_macs` to the devices' real MS/TP addresses. To build one by hand: `python -m gateway.icc_project --csv predator_discovered.csv --mac 1 -o Predator.icsproj --excel Predator_Points.xlsx`.
+
+Setting up another PC, or rebuilding the Pi (including the ICC Studio install), is written up step by step in **SETUP_ON_ANOTHER_COMPUTER.txt**.
 
 ## Why "gateway", not a true BACnet router
 
@@ -60,6 +63,7 @@ gateway/
   bacnet_ip.py      - virtual BACnet/IP device + Who-Is/I-Am discovery
   points.py         - curated points-map model (field point -> BACnet object)
   csv_export.py     - writes the discovered-points CSV
+  icc_project.py    - builds the Excel point map + ICC Configuration Studio .icsproj (Mirius, BACnet MS/TP client)
   api.py            - status/CSV-download HTTP API (stdlib only, port 8099)
   viewer.py         - Tkinter CSV viewer for the Pi's own desktop
   service.py        - systemd entrypoint wiring all of the above together

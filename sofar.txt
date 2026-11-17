@@ -1,6 +1,6 @@
 PREDATOR - STATUS SO FAR (2026-11-04)
 =====================================
-password: admin123
+password: [REDACTED - was committed to this public repo earlier; change the Pi password with `passwd`]
 PROJECT
 - Raspberry Pi 5 (8GB) as a universal field-bus gateway/translator:
   BACnet/IP, BACnet MS/TP, Modbus RTU (RS-485), etc.
@@ -13,7 +13,7 @@ WHAT IS ON THE PI (read from the microSD boot partition)
 - Card: 256 GB SanDisk. Boot partition label "bootfs" (FAT32); Linux root is ext4
   (not readable from Windows).
 - Hostname: predator
-- SSH username: admin123  (NOT "predator")
+- SSH username: admin (renamed from admin123 on 2026-11-17; password unchanged; NOT "predator")
 - SSH enabled, password login allowed. (Password intentionally NOT recorded here.
   It is weak; change it with `passwd` and move to key auth when stable.)
 - Wi-Fi configured for open network "M-GUEST" only - not usable here.
@@ -49,7 +49,7 @@ SSH KEY SETUP
 - Created a dedicated key on the PC: %USERPROFILE%\.ssh\predator_ed25519 (+ .pub), no passphrase.
 - Public key NOT yet installed on the Pi (password prompt hangs - see below).
 - Command to install it (run in PowerShell, one line, enter the Pi password when asked):
-  ssh admin123@192.168.1.50 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '<contents of predator_ed25519.pub>' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo KEY_INSTALLED"
+  ssh admin@192.168.1.50 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '<contents of predator_ed25519.pub>' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo KEY_INSTALLED"
 - Pi host key (ED25519) fingerprint accepted:
   SHA256:3uw/FFgd6+1WCoG+T+bU2+LrC+DkMTiWCEZjx2PIadM
 - Note: an earlier attempt used "$env:USERPROFILE.ssh" (missing backslash) and piped an
@@ -82,7 +82,7 @@ NEXT STEPS
    and any case/power button/HAT, then re-test (ping + SSH for 5+ minutes).
 2. Optionally disable EEE on the PC adapter (admin PowerShell command above).
 3. Once stable: install the SSH key, then connect with
-   ssh -i %USERPROFILE%\.ssh\predator_ed25519 admin123@192.168.1.50
+   ssh -i %USERPROFILE%\.ssh\predator_ed25519 admin@192.168.1.50
 4. Then: enable VNC / Raspberry Pi Connect for the GUI, disable serial console,
    install log2ram, add RS-485 UART overlays, update OS and EEPROM, change the password.
 5. Later: choose/install the gateway stack (BACnet/IP, MS/TP, Modbus RTU) and wire RS-485.
@@ -106,8 +106,8 @@ RESULT
   1:6.18.50-1+rpt1, 2026-09-11), aarch64.
 
 HOW TO CONNECT
-- ssh -i %USERPROFILE%\.ssh\predator_ed25519 admin123@192.168.1.50
-- User: admin123 (NOT "predator"). Host: 192.168.1.50 (static, direct cable to this PC).
+- ssh -i %USERPROFILE%\.ssh\predator_ed25519 admin@192.168.1.50
+- User: admin (NOT "predator"). Host: 192.168.1.50 (static, direct cable to this PC).
 - Pi host key (ED25519) fingerprint accepted:
   SHA256:3uw/FFgd6+1WCoG+T+bU2+LrC+DkMTiWCEZjx2PIadM
 
@@ -158,7 +158,7 @@ DONE ON THE PI (backups: /boot/firmware/config.txt.predator.bak, cmdline.txt.pre
 - RS-485 UART overlays added to config.txt: dtoverlay=uart2-pi5, dtoverlay=uart3-pi5
   (-> /dev/ttyAMA2, /dev/ttyAMA3). No ctsrts option yet - add ",ctsrts" or use the HAT's
   own direction control once the RS-485 hardware is chosen.
-- VNC (wayvnc) enabled, listening on port 5900. Desktop autologin enabled (user admin123).
+- VNC (wayvnc) enabled, listening on port 5900. Desktop autologin enabled (user admin).
   Desktop verified via screenshot after reboot (Wayland, labwc).
 - Wi-Fi turned OFF permanently (radio off, wifi profiles autoconnect=no,
   dtoverlay=disable-wifi-pi5). The Pi now uses eth0 (192.168.1.50) only.
@@ -178,7 +178,7 @@ NOT DONE - needs internet
 
 SEEING THE GUI
 - No VNC viewer is installed on this PC. Install one (e.g. RealVNC Viewer or TigerVNC) and
-  connect to 192.168.1.50:5900 (login: admin123 + Pi password).
+  connect to 192.168.1.50:5900 (login: admin + Pi password).
 - Alternatively I can take screenshots over SSH (grim) on request.
 
 
@@ -191,8 +191,8 @@ BACKGROUND
 - PAMS Pi found at 192.168.1.10 (static), hostname "alpha-p", also a Raspberry Pi 5 Model B
   Rev 1.1, Debian 13 (trixie), kernel 6.18.39+rpt-rpi-2712 (predator is 6.18.50, same family).
 - Login (from PAMS_CheatSheet.txt / PAMS_Commands.txt in the repo): ssh admin@alpha-p
-  User-supplied password: Noesis1!  (do NOT reuse/record this on the predator Pi; it is
-  alpha-p's password, left here only as a note of what worked). Key authentication was then
+  User-supplied password: [REDACTED - was committed to this public repo earlier; alpha-p's owner should
+  rotate it] (do NOT reuse/record this on the predator Pi). Key authentication was then
   installed (same %USERPROFILE%\.ssh\predator_ed25519.pub key, now also authorized on alpha-p).
   NOTE: alpha-p is PAMS's device - treat it as someone else's system, change nothing else on it.
 
@@ -731,4 +731,25 @@ UPDATE (same day, later): CSV ENRICHED FOR BMS POINT ENTRY (Insight/Apogee)
   so Modbus rows stay unit-level for now.
 - Deployed to the already-running Pi mid-scan (service restarted with the new code while
   the user's RS-485 adapter was plugged in and the unattended discovery window was active).
+
+
+
+CHAPTER - USERNAME RENAME + WI-FI (2026-11-17)
+- Pi user renamed admin123 -> admin (home /home/admin, group admin, autologin + predator-gateway.service updated). Password unchanged. Key login works: ssh -i %USERPROFILE%\.ssh\predator_ed25519 admin@192.168.1.50
+- Wi-Fi re-enabled (disable-wifi-pi5 overlay commented out, radio on, profile netplan-wlan0-M-GUEST autoconnect). wlan0 = 10.170.19.194/22.
+- M-GUEST blocks client-to-client TCP (ping OK; SSH/VNC time out) and is a captive portal, so the GUI is still reached via 192.168.1.50:5900 over Ethernet. For GUI over Wi-Fi, join the Pi to a non-isolated network (e.g. M-PROD/SIALMAC; needs the password) with: sudo nmcli dev wifi connect <SSID> password <PW>
+
+CHAPTER - ICC CONFIGURATION STUDIO ON THE PI (2026-11-17)
+- Windows x86 app run on the Pi 5 via Hangover wine 11.16 (FEX/wowbox64) + wine-mono 11.3.0 (replaces the .NET 4.5 installer). Prefix ~/.wine-icc; launcher ~/.local/bin/icc-config-studio + desktop icon. First start takes ~3-4 min.
+- Pi now boots the 4K-page kernel (kernel=kernel8.img in config.txt; backup config.txt.pre4k.bak).
+- Pi has no RTC battery: clock resets on reboot (NTP blocked on M-GUEST); set with: sudo date -u -s 'YYYY-MM-DD HH:MM:SS'
+- box64 0.4.4 built from source in /usr/local/bin (not needed by Hangover); apt update warns about the azlux log2ram repo keyring (pre-existing).
+
+
+CHAPTER - ICC PROJECT AUTO-GENERATION (2026-11-17)
+- gateway/icc_project.py builds a Mirius .icsproj (BACnet MS/TP client, Port A) from discovered MS/TP points or the points workbook; hooked into csv_export ([icc] section). Generated + opened cleanly in ICC Configuration Studio on the Pi (122 points from ICC_MSTP_Point_Mapping.xlsx, MAC 1, 19200 baud).
+- Saved to the Pi Desktop and the PC Desktop as Predator_Mirius_BACnet.icsproj. BMS side (Siemens FLN Slave, Port B) intentionally NOT included - add it in the Studio using the same Database Addresses, then download to the Mirius.
+- Pi gateway files deployed (icc_project.py, config.py, csv_export.py); predator-gateway restarted OK.
+
+- UPDATE: the gateway now also writes an Excel point map (Predator_Points.xlsx) and refreshes BOTH it and Predator_Mirius_BACnet.icsproj on the Pi Desktop every time the MS/TP points change; a desktop project you saved Port B edits into is kept aside as '(saved <timestamp>)'. Verified end to end on the Pi with a simulated 122-point scan.
 

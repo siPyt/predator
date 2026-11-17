@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=ICC Configuration Studio
+Exec=/home/admin/.local/bin/icc-config-studio %f
+Terminal=false
+Categories=Development;Utility;
+MimeType=application/x-icsproj;

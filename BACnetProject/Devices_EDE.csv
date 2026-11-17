@@ -1,0 +1,131 @@
+#Engineering-Data-Exchange - B.I.G.-EU
+PROJECT_NAME
+VERSION_OF_REFERENCEFILE
+TIMESTAMP_OF_LAST_CHANGE;8/28/2026
+AUTHOR_OF_LAST_CHANGE;YABE Yet Another Bacnet Explorer
+VERSION_OF_LAYOUT;2.3
+#mandatory;mandator;mandatory;mandatory;mandatory;optional;optional;optional;optional;optional;optional;optional;optional;optional;optional;optional
+# keyname;device obj.-instance;object-name;object-type;object-instance;description;present-value-default;min-present-value;max-present-value;settable;supports COV;hi-limit;low-limit;state-text-reference;unit-code;vendor-specific-addres
+OBJECT_DEVICE:200100;200100;BASRTP-B038D9B;8;200100;BACnet/IP to MS/TP Router;;;;;;;;;
+OBJECT_DEVICE:9050;9050;Daikin_MicroTech_9050;8;9050;Daikin MicroTech Controller;;;;;;;;;
+OBJECT_ANALOG_INPUT:1;9050;EntEvapWaterTemp;0;1;;;;;;;;;;64
+OBJECT_ANALOG_INPUT:2;9050;;0;2;;;;;;;;;;
+OBJECT_ANALOG_INPUT:5;9050;OutdoorAirTemp;0;5;;;;;;;;;;64
+OBJECT_ANALOG_INPUT:63;9050;C1Comp1DischargeTemp;0;63;;;;;;;;;;64
+OBJECT_ANALOG_INPUT:66;9050;C2Comp1DischargeTemp;0;66;;;;;;;;;;64
+OBJECT_ANALOG_INPUT:99;9050;Cond1RefPressure;0;99;;;;;;;;;;56
+OBJECT_ANALOG_INPUT:100;9050;Cond2RefPressure;0;100;;;;;;;;;;56
+OBJECT_ANALOG_INPUT:141;9050;C1EvapRefPressure;0;141;;;;;;;;;;56
+OBJECT_ANALOG_INPUT:142;9050;;0;142;;;;;;;;;;
+OBJECT_ANALOG_INPUT:224;9050;;0;224;;;;;;;;;;
+OBJECT_ANALOG_INPUT:225;9050;;0;225;;;;;;;;;;
+OBJECT_ANALOG_VALUE:1;9050;ActiveCapacityLimit;2;1;;;;;;;;;;98
+OBJECT_ANALOG_VALUE:2;9050;ChillerCapacity;2;2;;;;;;;;;;98
+OBJECT_ANALOG_VALUE:3;9050;NetworkCapacityLimitPct;2;3;;;;;;;;;;98
+OBJECT_ANALOG_VALUE:4;9050;NetworkCoolTempSetpoint;2;4;;;;;;;;;;64
+OBJECT_ANALOG_VALUE:5;9050;ActiveLvgWaterTarget;2;5;;;;;;;;;;64
+OBJECT_ANALOG_VALUE:7;9050;NetworkIceTempSetpoint;2;7;;;;;;;;;;64
+OBJECT_ANALOG_VALUE:44;9050;Cond1SatRefTemp;2;44;;;;;;;;;;64
+OBJECT_ANALOG_VALUE:45;9050;;2;45;;;;;;;;;;
+OBJECT_ANALOG_VALUE:68;9050;;2;68;;;;;;;;;;
+OBJECT_ANALOG_VALUE:69;9050;;2;69;;;;;;;;;;
+OBJECT_ANALOG_VALUE:74;9050;;2;74;;;;;;;;;;
+OBJECT_ANALOG_VALUE:75;9050;C1Comp2Hours;2;75;;;;;;;;;;71
+OBJECT_ANALOG_VALUE:76;9050;C1Comp3Hours;2;76;;;;;;;;;;71
+OBJECT_ANALOG_VALUE:77;9050;C2Comp1Hours;2;77;;;;;;;;;;71
+OBJECT_ANALOG_VALUE:78;9050;C2Comp2Hours;2;78;;;;;;;;;;71
+OBJECT_ANALOG_VALUE:79;9050;C2Comp3Hours;2;79;;;;;;;;;;71
+OBJECT_ANALOG_VALUE:92;9050;C1Comp1Starts;2;92;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:93;9050;;2;93;;;;;;;;;;
+OBJECT_ANALOG_VALUE:94;9050;;2;94;;;;;;;;;;
+OBJECT_ANALOG_VALUE:95;9050;C2Comp1Starts;2;95;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:96;9050;C2Comp2Starts;2;96;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:97;9050;C2Comp3Starts;2;97;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:112;9050;EvapPump1OperHours;2;112;;;;;;;;;;71
+OBJECT_ANALOG_VALUE:113;9050;EvapPump2OperHours;2;113;;;;;;;;;;71
+OBJECT_ANALOG_VALUE:900;9050;AVProblemAlarm;2;900;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:901;9050;AVFaultAlarm;2;901;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:902;9050;AVWarningAlarm;2;902;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:906;9050;AVProblemModType;2;906;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:907;9050;AVProblemModID;2;907;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:908;9050;AVProblemModPayload;2;908;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:909;9050;AVFaultModType;2;909;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:910;9050;AVFaultModID;2;910;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:911;9050;AVFaultModPayload;2;911;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:912;9050;;2;912;;;;;;;;;;
+OBJECT_ANALOG_VALUE:913;9050;AVWarningModID;2;913;;;;;;;;;;95
+OBJECT_ANALOG_VALUE:914;9050;AVWarningModPayload;2;914;;;;;;;;;;95
+OBJECT_BINARY_INPUT:2;9050;EvapWaterFlowStatus;3;2;;;;;;;;;0;
+OBJECT_BINARY_INPUT:3;9050;ChillerLocalRemote;3;3;;;;;;;;;1;
+OBJECT_BINARY_INPUT:4;9050;UnitOnOff;3;4;;;;;;;;;2;
+OBJECT_BINARY_INPUT:5;9050;RunEnabled;3;5;;;;;;;;;3;
+OBJECT_BINARY_INPUT:6;9050;ChillerLimited;3;6;;;;;;;;;4;
+OBJECT_BINARY_INPUT:7;9050;ChillerEnableOutput;3;7;;;;;;;;;5;
+OBJECT_BINARY_INPUT:8;9050;EvapPump1State;3;8;;;;;;;;;6;
+OBJECT_BINARY_INPUT:9;9050;EvapPump2State;3;9;;;;;;;;;6;
+OBJECT_BINARY_INPUT:10;9050;AlarmDigitalOutput;3;10;;;;;;;;;7;
+OBJECT_BINARY_VALUE:2;9050;ChillerEnableStp;5;2;;;;;;;;;5;
+OBJECT_BINARY_VALUE:8;9050;ClearAlarm;5;8;;;;;;;;;8;
+OBJECT_MULTI_STATE_VALUE:1;9050;UnitStatus;19;1;;;;;;;;;9;
+OBJECT_MULTI_STATE_VALUE:2;9050;ActiveMode;19;2;;;;;;;;;10;
+OBJECT_MULTI_STATE_VALUE:3;9050;ChillerOperationMode;19;3;;;;;;;;;11;
+OBJECT_MULTI_STATE_VALUE:4;9050;Units;19;4;;;;;;;;;12;
+OBJECT_MULTI_STATE_VALUE:7;9050;RefrigerantType;19;7;;;;;;;;;13;
+OBJECT_CALENDAR:1;9050;CA1;6;1;Calendar 1;;;;;;;;;
+OBJECT_CALENDAR:2;9050;;6;2;;;;;;;;;;
+OBJECT_CALENDAR:3;9050;CA3;6;3;Calendar 3;;;;;;;;;
+OBJECT_CALENDAR:4;9050;CA4;6;4;Calendar 4;;;;;;;;;
+OBJECT_CALENDAR:5;9050;CA5;6;5;Calendar 5;;;;;;;;;
+OBJECT_CALENDAR:6;9050;CA6;6;6;Calendar 6;;;;;;;;;
+OBJECT_CALENDAR:7;9050;CA7;6;7;Calendar 7;;;;;;;;;
+OBJECT_CALENDAR:8;9050;CA8;6;8;Calendar 8;;;;;;;;;
+OBJECT_CALENDAR:9;9050;CA9;6;9;Calendar 9;;;;;;;;;
+OBJECT_CALENDAR:10;9050;CA10;6;10;Calendar 10;;;;;;;;;
+OBJECT_CALENDAR:11;9050;CA11;6;11;Calendar 11;;;;;;;;;
+OBJECT_CALENDAR:12;9050;;6;12;;;;;;;;;;
+OBJECT_CALENDAR:13;9050;CA13;6;13;Calendar 13;;;;;;;;;
+OBJECT_CALENDAR:14;9050;CA14;6;14;Calendar 14;;;;;;;;;
+OBJECT_CALENDAR:15;9050;CA15;6;15;Calendar 15;;;;;;;;;
+OBJECT_CALENDAR:16;9050;CA16;6;16;Calendar 16;;;;;;;;;
+OBJECT_FILE:0;9050;;10;0;;;;;;;;;;
+OBJECT_FILE:1;9050;File1;10;1;BACnet Binary Database File MS/TP;;;;;;;;;
+OBJECT_FILE:2;9050;File2;10;2;Firmware/Application AP1 Upgrade File;;;;;;;;;
+OBJECT_FILE:3;9050;File3;10;3;General Purpose/User File;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:1;9050;NC1;15;1;Notification Class 1;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:2;9050;NC2;15;2;Notification Class 2;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:3;9050;NC3;15;3;Notification Class 3;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:4;9050;NC4;15;4;Notification Class 4;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:5;9050;NC5;15;5;Notification Class 5;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:6;9050;NC6;15;6;Notification Class 6;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:7;9050;NC7;15;7;Notification Class 7;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:8;9050;NC8;15;8;Notification Class 8;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:9;9050;NC9;15;9;Notification Class 9;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:10;9050;NC10;15;10;Notification Class 10;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:11;9050;NC11;15;11;Notification Class 11;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:12;9050;;15;12;;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:13;9050;;15;13;;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:14;9050;;15;14;;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:15;9050;;15;15;;;;;;;;;;
+OBJECT_NOTIFICATION_CLASS:16;9050;NC16;15;16;Notification Class 16;;;;;;;;;
+OBJECT_SCHEDULE:1;9050;SC1;17;1;Schedule 1;;;;;;;;;
+OBJECT_SCHEDULE:2;9050;SC2;17;2;Schedule 2;;;;;;;;;
+OBJECT_SCHEDULE:3;9050;SC3;17;3;Schedule 3;;;;;;;;;
+OBJECT_SCHEDULE:4;9050;SC4;17;4;Schedule 4;;;;;;;;;
+OBJECT_SCHEDULE:5;9050;SC5;17;5;Schedule 5;;;;;;;;;
+OBJECT_SCHEDULE:6;9050;SC6;17;6;Schedule 6;;;;;;;;;
+OBJECT_SCHEDULE:7;9050;SC7;17;7;Schedule 7;;;;;;;;;
+OBJECT_SCHEDULE:8;9050;SC8;17;8;Schedule 8;;;;;;;;;
+OBJECT_SCHEDULE:9;9050;;17;9;;;;;;;;;;
+OBJECT_SCHEDULE:10;9050;;17;10;;;;;;;;;;
+OBJECT_SCHEDULE:11;9050;SC11;17;11;Schedule 11;;;;;;;;;
+OBJECT_SCHEDULE:12;9050;SC12;17;12;Schedule 12;;;;;;;;;
+OBJECT_SCHEDULE:13;9050;SC13;17;13;Schedule 13;;;;;;;;;
+OBJECT_SCHEDULE:14;9050;SC14;17;14;Schedule 14;;;;;;;;;
+OBJECT_SCHEDULE:15;9050;SC15;17;15;Schedule 15;;;;;;;;;
+OBJECT_SCHEDULE:16;9050;SC16;17;16;Schedule 16;;;;;;;;;
+OBJECT_TRENDLOG:1;9050;TL1;20;1;Trend Log 1;;;;;;;;;
+OBJECT_TRENDLOG:2;9050;;20;2;;;;;;;;;;
+OBJECT_TRENDLOG:3;9050;TL3;20;3;Trend Log 3;;;;;;;;;
+OBJECT_TRENDLOG:4;9050;TL4;20;4;Trend Log 4;;;;;;;;;
+OBJECT_TRENDLOG:5;9050;TL5;20;5;Trend Log 5;;;;;;;;;
+OBJECT_TRENDLOG:6;9050;TL6;20;6;Trend Log 6;;;;;;;;;

@@ -78,6 +78,23 @@ _DEFAULTS = {
         "desktop_copy": "~/Desktop/predator_discovered.csv",
         "write_seconds": "5",
     },
+    "icc": {
+        # When BACnet MS/TP points are discovered, the gateway writes (and refreshes whenever the
+        # points change) an Excel point map and an ICC Configuration Studio project for the
+        # Mirius's BACnet MS/TP client side (Port A) - see gateway/icc_project.py. The Port B
+        # (BMS) side is left for the engineer. If the desktop file was edited/saved over, the
+        # edited version is kept aside as "<name> (saved <timestamp>)" rather than overwritten.
+        "enabled": "true",
+        "path": "~/predator_icc_project.icsproj",
+        "desktop_copy": "~/Desktop/Predator_Mirius_BACnet.icsproj",
+        "xlsx_path": "~/predator_points.xlsx",
+        "xlsx_desktop_copy": "~/Desktop/Predator_Points.xlsx",
+        # BACnet MS/TP MAC address of the discovered devices (bacwi's MAC is not kept by
+        # discovery). Must match the device's own MS/TP address; override per device
+        # as "instance=mac,instance=mac".
+        "default_mac": "1",
+        "device_macs": "",
+    },
     "overrides": {
         # Manual per-port troubleshooting overrides set from the explorer GUI
         # (gateway/viewer.py) - persisted here so they survive a restart.

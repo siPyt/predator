@@ -16,6 +16,7 @@ import threading
 import time
 
 from . import config as cfgmod
+from . import icc_project
 from .points import load_points, parse_object
 from .runtime_state import STATE
 
@@ -132,6 +133,11 @@ def write_csv(cfg):
     with open(tmp, "w", encoding="utf-8", newline="") as f:
         f.write(buf.getvalue())
     os.replace(tmp, path)
+
+    try:
+        icc_project.write_if_configured(cfg, rows)
+    except Exception:  # noqa: BLE001
+        log.exception("error writing ICC project")
 
     desktop_copy = cfgmod.csv_desktop_copy_path(cfg)
     if desktop_copy:

@@ -1,0 +1,162 @@
+PREDATOR - HOW TO SET THIS UP / FIX IT ON ANOTHER COMPUTER
+==========================================================
+Written 2026-11-17. Everything here was actually done and checked on the real Pi unless it says NOT DONE.
+Companion notes: sofar.txt (running history), README.md (what predator is), SCANNER.md, USER_GUIDE.md.
+
+!!! SECURITY - DO THIS FIRST !!!
+- This repo is PUBLIC on GitHub. Earlier commits (from the very first one, c42b60c) contain TWO plain-text
+  passwords that were in sofar.txt: the predator Pi's login password, and the PAMS Pi "alpha-p" password.
+  They are redacted in the current files, but they are STILL in the git history, so treat both as leaked:
+    * On the predator Pi run `passwd` and pick a new password (the old one was weak). Do it from the Pi.
+    * Ask the owner of alpha-p (PAMS) to change theirs.
+  Rewriting the history would need a force-push and does not help for anyone who already copied it.
+- Never write passwords into any file in this repo. This file deliberately has none.
+
+
+1. WHAT EXISTS
+--------------
+PI (hostname "predator", Raspberry Pi 5 8GB, Raspberry Pi OS 64-bit Desktop, Debian 13 trixie)
+  - login user:  admin   (was "admin123" until 2026-11-17; renamed with usermod, home is /home/admin)
+  - Ethernet:    eth0 static 192.168.1.50/24, wired straight to the PC (no router). Locked to 100M, EEE off by
+                 the eth0-stable-watch service (see sofar.txt chapters 4-5).
+  - Wi-Fi:       wlan0 on "M-GUEST" (open guest network, captive portal, blocks device-to-device traffic, so SSH/VNC
+                 over Wi-Fi do NOT work from the PC; the GUI is reached over the Ethernet cable). Re-enabled by
+                 commenting out dtoverlay=disable-wifi-pi5 in /boot/firmware/config.txt.
+  - GUI:         labwc desktop, VNC (wayvnc) on port 5900, autologin as admin.
+  - Kernel:      kernel=kernel8.img in /boot/firmware/config.txt (4K pages; needed for the x86 emulator). Backups:
+                 /boot/firmware/config.txt.pre4k.bak and .prerename.bak
+  - RS-485:      dtoverlay=uart2-pi5 / uart3-pi5 (serial console disabled).
+  - predator gateway: systemd service predator-gateway, code in /home/admin/predator, venv /home/admin/predator-venv,
+                 config /home/admin/predator_gateway.conf (optional, all keys have defaults).
+  - ICC Configuration Studio 3.8.3.0 (Windows app) run through Hangover wine - see section 4.
+  - No RTC battery: the clock resets on every reboot, and NTP is blocked on M-GUEST. Set it by hand:
+        sudo date -u -s 'YYYY-MM-DD HH:MM:SS'      (apt update fails with "Not live until" if the clock is wrong)
+
+PC (Windows)
+  - The Pi is plugged into a Realtek USB GbE adapter ("Ethernet 2", 192.168.1.12/24); the built-in Intel port was used
+    earlier (192.168.1.101/111). The adapter connected to the Pi must have a 192.168.1.x/24 address.
+  - SSH key: %USERPROFILE%\.ssh\predator_ed25519 (private key - exists ONLY on the original PC, NOT in the repo).
+
+
+2. CONNECTING FROM A NEW COMPUTER
+---------------------------------
+1. Give the PC adapter that the Pi cable is plugged into a static IP in 192.168.1.0/24 (e.g. 192.168.1.101, mask
+   255.255.255.0, no gateway). Then:  ping 192.168.1.50
+2. SSH key: on the new PC run  ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\predator_ed25519
+   then install the public key on the Pi (asks for the Pi password once):
+     type $env:USERPROFILE\.ssh\predator_ed25519.pub | ssh admin@192.168.1.50 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+   After that:  ssh -i $env:USERPROFILE\.ssh\predator_ed25519 admin@192.168.1.50
+3. See the Pi's screen: install a VNC viewer (RealVNC Viewer / TigerVNC) and connect to 192.168.1.50:5900
+   (login: admin + the Pi password). Screenshot over SSH instead:
+     XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 grim /tmp/s.png     (then scp it)
+4. Get the gateway CSV without a file transfer:  http://192.168.1.50:8099/export.csv
+5. Remote one-liners with sudo: sudo asks for the password; pipe it in only from a script you control and never save it.
+
+
+3. THE GATEWAY AND THE AUTOMATIC EXCEL + ICC PROJECT
+----------------------------------------------------
+Code: gateway/icc_project.py (new), hooked into gateway/csv_export.py, settings in [icc] of gateway/config.py.
+What happens by itself: whenever the gateway finds BACnet MS/TP points (or the points change) it writes
+  ~/Desktop/Predator_Points.xlsx          Excel point map (cols: device, type, instance, name, R/W, suggested Siemens
+                                          FLN type + point number, ICC database address, 12-char FLN descriptor)
+  ~/Desktop/Predator_Mirius_BACnet.icsproj  ICC Configuration Studio project: Mirius, Port A = BACnet MS/TP client with
+                                          one Service Object per point. PORT B (Siemens FLN / BMS side) IS NOT INCLUDED -
+                                          the engineer adds it, then downloads to the Mirius.
+  plus generated "home" copies ~/predator_points.xlsx and ~/predator_icc_project.icsproj.
+- If you save your Port B work over the desktop project, the next refresh keeps your version as
+  "Predator_Mirius_BACnet (saved <timestamp>).icsproj" and writes a fresh one - nothing is lost.
+- Nothing is written until MS/TP points exist (an empty scan never replaces a good project).
+- Settings to check in ~/predator_gateway.conf ([icc]): default_mac (default 1) and device_macs "9050=1,3200=6".
+  The MS/TP MAC is NOT captured by discovery - it must match the device's own MS/TP address or the Mirius cannot reach it.
+- By hand (no gateway needed):
+     python -m gateway.icc_project --xlsx points.xlsx --mac 1 --baud 19200 -o Predator.icsproj --excel Out.xlsx
+     python -m gateway.icc_project --csv predator_discovered.csv --mac 1 -o Predator.icsproj
+- Rules baked in (matched to a real project and to ConfigurationStudio.exe's own code):
+     VAddr = (BACnet object type << 22) | instance   (AI0 AO1 AV2 BI3 BO4 BV5 MI13 MO14 MV19)
+     analog = 16-bit unsigned (decimals are lost; 32-bit float is available in the Studio), multi-state uses <OB1>,
+     binary uses <Bits>; writable types (AO AV BO BV MO MV) get WFC=15 and write priority 16;
+     DB addresses: input order, analog/multi-state take 4 bytes, binary 1 byte; Port A baud 19200, MaxMaster 127.
+     FLN descriptors: 12 chars, A-Z0-9 only, unique. FLN point numbers start at 3, skip 1,2,20,29,99, max 255.
+- Database addresses are assigned in a fixed order (device, type group, instance); if a new point appears in the middle,
+  later addresses shift - recheck Port B after a rescan.
+- Tests:  python -m unittest tests.test_icc_project   (full suite: python -m unittest discover -s tests; 4 tests need
+  pyserial/paho installed and fail without them - not related).
+- Deploying code changes to the Pi (it is a plain copy, not a git clone):
+     scp gateway\icc_project.py gateway\config.py gateway\csv_export.py admin@192.168.1.50:/home/admin/predator/gateway/
+     ssh admin@192.168.1.50 "sudo systemctl restart predator-gateway"
+- Reference material that is NOT in the repo (on the original PC, Desktop\BACnetMS_TP): "Project 2.icsproj" (the old
+  hand-built project used as the format oracle), its mapping-plan/checklist txt files, ICC_Mirius_*.xlsx, Yabe photos.
+  BACnetProject/ in this repo has the Yabe/EDE exports and ICC_MSTP_Point_Mapping.xlsx (122 points, device 9050).
+- How the format was learned (repeat if ICC releases a new version): copy ConfigurationStudio.exe off the Pi and run
+  `dotnet tool install --global ilspycmd` then `ilspycmd -p -o src ConfigurationStudio.exe`. The project writer is in
+  ConfigurationStudio.Model\ApplicationConfigurationModel.cs ("ServObj" entries) and ProjectModel.WriteConfiguration.
+
+
+4. ICC CONFIGURATION STUDIO ON THE PI (WINDOWS APP ON ARM) - FULL RECIPE
+------------------------------------------------------------------------
+Why this way: the app is a 32/64-bit x86 .NET WPF program; the Pi is ARM64. Debian's wine cannot run it, stock x86 wine
+under box64 crashes (assertion in virtual.c), so Hangover (wine with the FEX/box64 emulators built in) is used.
+Microsoft's dotnetfx45 installers CANNOT be used; wine-mono replaces .NET and the ICC installer accepts it.
+Steps (all on the Pi, as admin; internet needed; set the clock first):
+  a) 4K kernel:  add "kernel=kernel8.img" under [all] in /boot/firmware/config.txt, reboot. Check: getconf PAGESIZE -> 4096.
+  b) Hangover 11.16 for Debian 13:
+       mkdir ~/hang && cd ~/hang
+       curl -L -O https://github.com/AndreRH/hangover/releases/download/hangover-11.16/hangover_11.16_debian13_trixie_arm64.tar
+       tar xf hangover_11.16_debian13_trixie_arm64.tar
+       sudo apt-get install -y ./hangover-wine_*.deb ./hangover-wowbox64_*.deb ./hangover-libarm64ecfex_*.deb ./hangover-libwow64fex_*.deb
+  c) wine prefix + x86 wine-mono 11.3.0 (keep the msi under ~/.cache, /tmp is wiped on reboot):
+       export WINEPREFIX=$HOME/.wine-icc DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000
+       WINEDLLOVERRIDES="mscoree,mshtml=" wine wineboot -i
+       mkdir -p ~/.cache/icc && curl -L -o ~/.cache/icc/mono.msi https://dl.winehq.org/wine/wine-mono/11.3.0/wine-mono-11.3.0-x86.msi
+       wine msiexec /i Z:\\home\\admin\\.cache\\icc\\mono.msi /qn
+       (a harmless "createlinks-x86_64.dll ... (193)" error appears; ignore it)
+  d) Install ICC Studio from "ICC Configuration Studio Installer.zip" (V3.8.3.0; originally downloaded to ~/Downloads on the
+     Pi; official source http://www.iccdesigns.com/downloads/configstudio/exe/ICC%20Configuration%20Studio%20Installer.zip):
+       unzip it, run  wine setup.exe  once (it extracts the MSI), close the wizard, then install silently:
+       cd "<...>/drive_c/users/admin/AppData/Local/Downloaded Installations/{GUID}"
+       wine msiexec /i "ICC Configuration Studio.msi" /qn ALLUSERS=1
+     Installs to  C:\Program Files (x86)\ICC\ICC Configuration Studio\ConfigurationStudio.exe
+  e) Launcher + icon + file association (files are in scripts/pi/):
+       cp scripts/pi/icc-config-studio ~/.local/bin/ && chmod +x ~/.local/bin/icc-config-studio
+       cp scripts/pi/icc-config-studio.desktop ~/.local/share/applications/ && cp it to ~/Desktop/ too (chmod +x)
+       mkdir -p ~/.local/share/mime/packages && cp scripts/pi/icsproj-mime.xml ~/.local/share/mime/packages/
+       update-mime-database ~/.local/share/mime; update-desktop-database ~/.local/share/applications
+       xdg-mime default icc-config-studio.desktop application/x-icsproj
+       printf 'WINEPREFIX=/home/admin/.wine-icc\nWINEDEBUG=-all\n' >> ~/.config/labwc/environment   (takes effect at next login)
+       delete the installer's "ICC Configuration Studio.lnk" from ~/Desktop (see pitfalls)
+  f) Open a project:  icc-config-studio ~/Desktop/Predator_Mirius_BACnet.icsproj   (or double-click the file).
+Facts and pitfalls learned the hard way:
+  - It takes about 2 minutes to open (about 4 with a project). It is emulation. Afterwards it sits at ~0% CPU, ~1.4 GB RAM.
+    Open it once, leave it open, and DON'T click the icon again while it loads.
+  - Never launch it with a bare `wine ...` or via the installer's .lnk: that creates a second default prefix (~/.wine, 2.7 GB)
+    and a second Wine session; it happened once and was deleted. The launcher refuses to start a second copy.
+  - Tried and rejected: ARM64 wine-mono (no window ever appeared); FEX_TSOENABLED=0 (116 s vs 127-130 s, ~10%, not worth
+    the crash risk); box64 0.4.4 built from source (not needed by Hangover; it sits unused in /usr/local/bin).
+  - Pi measurements for reference: load ~0.2-1, ~5 GB RAM free, 5.1 V rail, 50-66 C, no under-voltage. It is NOT starved.
+  - Loading a generated project and clicking through objects was verified: Port A BACnet MS/TP Client shows 19200/1000/3/127/1,
+    objects list correctly (instance, MAC, DB address, 16-bit unsigned, offset-by-one, write priority 16).
+
+
+5. NETWORK DROPS (2-SECOND ETHERNET LINK LOSS)
+----------------------------------------------
+Symptom: VNC/SSH freeze for ~2 s. Pi journal: "eth0: Link is Down" then "Up - 100Mbps/Full" (journalctl -k | grep "eth0.*Link").
+Seen at 09:55 and 10:06 on 2026-11-17 only; the PC logged nothing at those moments and the Pi power rail was healthy.
+Suspect: the Realtek USB adapter's power saving. Applied on the PC (needs admin, needs a UAC click):
+     scripts\windows\disable-nic-power-saving.ps1 -Adapter "Ethernet 2"
+  -> Energy-Efficient Ethernet, Green Ethernet, Idle Power Saving all set to Disabled (originals saved in
+     scripts\windows\nic-before.json, all were enabled). "Allow the computer to turn off this device" could not be set from
+     PowerShell for this adapter: untick it by hand in Device Manager > adapter > Power Management.
+NOT PROVEN to be the cause. If it recurs: check the Pi journal times against the PC, try the Intel port, try another cable.
+
+
+6. THINGS THAT ARE STILL OPEN / NOT DONE
+----------------------------------------
+- Change the leaked passwords (section "SECURITY").
+- Port B (Siemens FLN Slave) side and the download to the Mirius are done by the engineer in ICC Studio (by design).
+- Install log2ram, OS/EEPROM update (apt full-upgrade) were blocked by the captive portal earlier; apt now works over HTTPS
+  but the azlux (log2ram) repo has no keyring so `apt update` prints an error - add the key or remove
+  /etc/apt/sources.list.d/azlux.list.
+- Consider disabling SSH password login once key login works on every PC you use (PasswordAuthentication no).
+- Wi-Fi to a non-isolating network (needed to reach the Pi GUI over Wi-Fi): sudo nmcli dev wifi connect <SSID> password <PW>
+- Real hardware test: the generator/hook was verified end to end with a simulated 122-point scan, not on a live chiller.
+- MS/TP MAC address (default_mac) must be confirmed per device.

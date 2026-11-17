@@ -1,0 +1,11 @@
+#!/bin/sh
+# Launcher for ICC Configuration Studio (Windows app run via Hangover wine on the Pi).
+# Install to ~/.local/bin/icc-config-studio and chmod +x.
+export WINEPREFIX=/home/admin/.wine-icc WINEDEBUG=-all
+# a second emulated copy doubles CPU/RAM use and makes the whole desktop crawl
+if pgrep -f ConfigurationStudio.exe >/dev/null; then exit 0; fi
+cd "$WINEPREFIX/drive_c/Program Files (x86)/ICC/ICC Configuration Studio"
+if [ -n "$1" ]; then
+  exec wine ConfigurationStudio.exe "Z:$(readlink -f "$1" | tr / '\\')"
+fi
+exec wine ConfigurationStudio.exe
