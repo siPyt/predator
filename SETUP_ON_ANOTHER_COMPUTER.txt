@@ -22,15 +22,19 @@ PI (hostname "predator", Raspberry Pi 5 8GB, Raspberry Pi OS 64-bit Desktop, Deb
   - Wi-Fi:       wlan0 on "M-GUEST" (open guest network, captive portal, blocks device-to-device traffic, so SSH/VNC
                  over Wi-Fi do NOT work from the PC; the GUI is reached over the Ethernet cable). Re-enabled by
                  commenting out dtoverlay=disable-wifi-pi5 in /boot/firmware/config.txt.
-  - GUI:         labwc desktop, VNC (wayvnc) on port 5900, autologin as admin.
+  - GUI:         labwc desktop, VNC (wayvnc) on port 5900 (static VNC user "admin123" in /etc/wayvnc/config with
+                 enable_pam=false, mode 640 root:vnc; backup /etc/wayvnc/config.bak), desktop autologin as admin.
   - Kernel:      kernel=kernel8.img in /boot/firmware/config.txt (4K pages; needed for the x86 emulator). Backups:
                  /boot/firmware/config.txt.pre4k.bak and .prerename.bak
   - RS-485:      dtoverlay=uart2-pi5 / uart3-pi5 (serial console disabled).
   - predator gateway: systemd service predator-gateway, code in /home/admin/predator, venv /home/admin/predator-venv,
                  config /home/admin/predator_gateway.conf (optional, all keys have defaults).
   - ICC Configuration Studio 3.8.3.0 (Windows app) run through Hangover wine - see section 4.
-  - No RTC battery: the clock resets on every reboot, and NTP is blocked on M-GUEST. Set it by hand:
-        sudo date -u -s 'YYYY-MM-DD HH:MM:SS'      (apt update fails with "Not live until" if the clock is wrong)
+  - RTC battery: rechargeable Pi 5 RTC battery connected (~3.33 V), 3.0 V trickle charging enabled via
+                 dtparam=rtc_bbat_vchg=3000000 under [all] in /boot/firmware/config.txt. NTP is disabled
+                 (M-GUEST blocks NTP) and time persists in /dev/rtc0 across reboots. If you ever need to set it:
+        sudo timedatectl set-ntp false && sudo timedatectl set-time 'YYYY-MM-DD HH:MM:SS'
+                 (use timedatectl, NOT `date -s`, which does not update /dev/rtc0; apt fails if clock is wrong)
 
 PC (Windows)
   - The Pi is plugged into a Realtek USB GbE adapter ("Ethernet 2", 192.168.1.12/24); the built-in Intel port was used
@@ -47,7 +51,7 @@ PC (Windows)
      type $env:USERPROFILE\.ssh\predator_ed25519.pub | ssh admin@192.168.1.50 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
    After that:  ssh -i $env:USERPROFILE\.ssh\predator_ed25519 admin@192.168.1.50
 3. See the Pi's screen: install a VNC viewer (RealVNC Viewer / TigerVNC) and connect to 192.168.1.50:5900
-   (login: admin + the Pi password). Screenshot over SSH instead:
+   (login: admin123 + the VNC password configured in /etc/wayvnc/config). Screenshot over SSH instead:
      XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 grim /tmp/s.png     (then scp it)
 4. Get the gateway CSV without a file transfer:  http://192.168.1.50:8099/export.csv
 5. Remote one-liners with sudo: sudo asks for the password; pipe it in only from a script you control and never save it.

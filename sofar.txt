@@ -753,3 +753,11 @@ CHAPTER - ICC PROJECT AUTO-GENERATION (2026-11-17)
 
 - UPDATE: the gateway now also writes an Excel point map (Predator_Points.xlsx) and refreshes BOTH it and Predator_Mirius_BACnet.icsproj on the Pi Desktop every time the MS/TP points change; a desktop project you saved Port B edits into is kept aside as '(saved <timestamp>)'. Verified end to end on the Pi with a simulated 122-point scan.
 
+
+CHAPTER - RTC BATTERY + TRICKLE CHARGING + VNC USERNAME (2026-11-24)
+- Correction to 2026-11-17 note: the Pi 5 DOES have an RTC battery connected (/sys/class/rtc/rtc0/battery_voltage ~3.33 V). The hardware clock had stayed at 1970-01-08 only because `date -u -s` does not write to /dev/rtc0 and NTP was enabled but blocked on M-GUEST.
+- Fixed via `sudo timedatectl set-ntp false` and `sudo timedatectl set-time "2026-11-24 13:26:00"`, which writes both system time and /dev/rtc0.
+- Enabled 3.0 V trickle charging for the rechargeable Pi 5 RTC battery: added `dtparam=rtc_bbat_vchg=3000000` under `[all]` in /boot/firmware/config.txt. Verified after reboot: charging_voltage=3000000, battery_voltage=3333330, and RTC time persisted across reboot.
+- VNC (wayvnc) login: kept Linux user as `admin` (so /home/admin, predator-gateway, and ~/.wine-icc stay intact) and configured /etc/wayvnc/config with `enable_pam=false`, `username=admin123`, and a dedicated VNC password (not recorded here; file locked to root:vnc mode 640, original backed up to /etc/wayvnc/config.bak). Verified wayvnc, predator-gateway, and eth0-stable-watch all active after reboot.
+
+
