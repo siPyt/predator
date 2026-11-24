@@ -53,38 +53,43 @@ PC (Windows)
 3. See the Pi's screen: install a VNC viewer (RealVNC Viewer / TigerVNC) and connect to 192.168.1.50:5900
    (login: admin123 + the VNC password configured in /etc/wayvnc/config). Screenshot over SSH instead:
      XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 grim /tmp/s.png     (then scp it)
-4. Get the gateway CSV without a file transfer:  http://192.168.1.50:8099/export.csv
+4. Open the Predator Web Command Center (no VNC needed):  http://192.168.1.50:8099/
+   Direct file downloads: /export.csv, /export.xlsx, /export.icsproj, /recon/export.csv
+   USB stick auto-export: plug any FAT32/exFAT thumb drive into the Pi to auto-copy a timestamped export folder (installed via scripts/install-usb-export.sh).
 5. Remote one-liners with sudo: sudo asks for the password; pipe it in only from a script you control and never save it.
 
 
-3. THE GATEWAY AND THE AUTOMATIC EXCEL + ICC PROJECT
-----------------------------------------------------
-Code: gateway/icc_project.py (new), hooked into gateway/csv_export.py, settings in [icc] of gateway/config.py.
+3. THE GATEWAY, WEB COMMAND CENTER, AND AUTOMATIC EXCEL + ICC PROJECT
+---------------------------------------------------------------------
+Code: gateway/icc_project.py, hooked into gateway/csv_export.py, settings in [icc] of gateway/config.py;
+Web Command Center in gateway/web_ui.py + gateway/api.py; field tools in gateway/telemetry.py, bus_doctor.py,
+recon.py, snapshots.py, demo.py; on-Pi GUI in gateway/viewer.py (Kali dragon icon in gateway/assets/predator-icon.png).
 What happens by itself: whenever the gateway finds BACnet MS/TP points (or the points change) it writes
-  ~/Desktop/Predator_Points.xlsx          Excel point map (cols: device, type, instance, name, R/W, suggested Siemens
-                                          FLN type + point number, ICC database address, 12-char FLN descriptor)
-  ~/Desktop/Predator_Mirius_BACnet.icsproj  ICC Configuration Studio project: Mirius, Port A = BACnet MS/TP client with
-                                          one Service Object per point. PORT B (Siemens FLN / BMS side) IS NOT INCLUDED -
-                                          the engineer adds it, then downloads to the Mirius.
+  ~/Desktop/Predator_Points.xlsx          Excel point map (device, type, instance, name, R/W, FLN type + point #,
+                                          ICC DB address, 12-char FLN descriptor, live Present Value & Units)
+  ~/Desktop/Predator_Mirius_BACnet.icsproj  ICC Configuration Studio project: Mirius Port A (BACnet MS/TP client)
+                                          plus optional Port B (BACnet MS/TP Server, Siemens FLN Slave, Modbus RTU Slave,
+                                          or Metasys N2 Slave - selectable in the Web UI / Explorer or [icc] port_b_protocol).
   plus generated "home" copies ~/predator_points.xlsx and ~/predator_icc_project.icsproj.
-- If you save your Port B work over the desktop project, the next refresh keeps your version as
+- If you save manual edits over the desktop project, the next refresh keeps your version as
   "Predator_Mirius_BACnet (saved <timestamp>).icsproj" and writes a fresh one - nothing is lost.
 - Nothing is written until MS/TP points exist (an empty scan never replaces a good project).
-- Settings to check in ~/predator_gateway.conf ([icc]): default_mac (default 1) and device_macs "9050=1,3200=6".
-  The MS/TP MAC is NOT captured by discovery - it must match the device's own MS/TP address or the Mirius cannot reach it.
+- MS/TP MAC addresses are now auto-captured from bacwi output during discovery and used automatically; you can
+  still override them in the Web UI / Explorer or ~/predator_gateway.conf ([icc] default_mac / device_macs).
+- Database addresses are pinned in ~/predator_db_map.json across rescans so newly discovered points append at
+  the end instead of shifting existing Port B addresses.
 - By hand (no gateway needed):
      python -m gateway.icc_project --xlsx points.xlsx --mac 1 --baud 19200 -o Predator.icsproj --excel Out.xlsx
-     python -m gateway.icc_project --csv predator_discovered.csv --mac 1 -o Predator.icsproj
-- Rules baked in (matched to a real project and to ConfigurationStudio.exe's own code):
-     VAddr = (BACnet object type << 22) | instance   (AI0 AO1 AV2 BI3 BO4 BV5 MI13 MO14 MV19)
-     analog = 16-bit unsigned (decimals are lost; 32-bit float is available in the Studio), multi-state uses <OB1>,
-     binary uses <Bits>; writable types (AO AV BO BV MO MV) get WFC=15 and write priority 16;
-     DB addresses: input order, analog/multi-state take 4 bytes, binary 1 byte; Port A baud 19200, MaxMaster 127.
+     python -m gateway.icc_project --csv predator_discovered.csv --mac 1 --port-b -o Predator.icsproj
+- Rules baked in (verified against ConfigurationStudio.exe 3.8.3.0):
+     Port A (<Index>1</Index>, ID 4): VAddr = (BACnet object type << 22) | instance (AI0 AO1 AV2 BI3 BO4 BV5 MI13 MO14 MV19);
+     analog defaults to 16-bit unsigned (32-bit float selectable per point unless Port B is FLN), multi-state uses <OB1>,
+     binary uses <Bits>; writable types get WFC=15 and write priority 16; DB addresses take 4 bytes analog/multi, 1 byte binary.
+     Port B (<Index>0</Index>, optional): BACnet MS/TP Server (ID 3, <BNObj>), Siemens FLN Slave (ID 18, <FlnObj>),
+     Modbus RTU Slave (ID 2, DefMap=1), or Metasys N2 Slave (ID 12, 9600/8N1, <N2Obj>).
      FLN descriptors: 12 chars, A-Z0-9 only, unique. FLN point numbers start at 3, skip 1,2,20,29,99, max 255.
-- Database addresses are assigned in a fixed order (device, type group, instance); if a new point appears in the middle,
-  later addresses shift - recheck Port B after a rescan.
-- Tests:  python -m unittest tests.test_icc_project   (full suite: python -m unittest discover -s tests; 4 tests need
-  pyserial/paho installed and fail without them - not related).
+- Tests:  python -m unittest tests.test_icc_project tests.test_gateway_features tests.test_robustness
+  (On the Pi inside ~/predator-venv/bin/python, all 41 tests pass including bacnet_ip & protocol suites.)
 - Deploying code changes to the Pi (it is a plain copy, not a git clone):
      scp gateway\icc_project.py gateway\config.py gateway\csv_export.py admin@192.168.1.50:/home/admin/predator/gateway/
      ssh admin@192.168.1.50 "sudo systemctl restart predator-gateway"

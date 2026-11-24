@@ -51,8 +51,8 @@ def _detect_mstp(cfg, port, bauds, timeout):
     for baud in bauds:
         result = mstp.probe_port(cfg, port, baud, timeout=timeout)
         if result["devices"]:
-            return baud, result["devices"]
-    return None, []
+            return baud, result["devices"], result.get("device_macs") or {}
+    return None, [], {}
 
 
 def _modbus_unit_sweep(port, baud, max_unit, timeout, seed=None, parity="N", stopbits=1, bytesize=8):
@@ -109,16 +109,19 @@ def detect_port(cfg, port):
     log.info("scanning %s ...", port)
 
     if cfgmod.getboolean(cfg, "mstp", "enabled"):
-        baud, devices = _detect_mstp(cfg, port, bauds, mstp_timeout)
+        baud, devices, device_macs = _detect_mstp(cfg, port, bauds, mstp_timeout)
         if devices:
             device_objects = _dump_mstp_devices(cfg, port, baud, devices)
+            mac_note = ""
+            if device_macs:
+                mac_note = " (MACs: " + ", ".join(f"{d}=0x{m:02X}/{m}" for d, m in sorted(device_macs.items())) + ")"
             STATE.set_port_state(
-                port, protocol=MSTP, baud=baud, devices=devices, device_objects=device_objects,
-                last_scan=time.time(), last_confirmed=time.time(),
-                note=f"{len(devices)} MS/TP device(s)",
+                port, protocol=MSTP, baud=baud, devices=devices, device_macs=device_macs,
+                device_objects=device_objects, last_scan=time.time(), last_confirmed=time.time(),
+                note=f"{len(devices)} MS/TP device(s){mac_note}",
             )
-            log.info("%s: BACnet MS/TP @ %s baud, devices=%s", port, baud, devices)
-            return {"port": port, "protocol": MSTP, "baud": baud, "devices": devices}
+            log.info("%s: BACnet MS/TP @ %s baud, devices=%s, macs=%s", port, baud, devices, device_macs)
+            return {"port": port, "protocol": MSTP, "baud": baud, "devices": devices, "device_macs": device_macs}
 
     if cfgmod.getboolean(cfg, "modbus", "enabled"):
         baud, devices = _detect_modbus(cfg, port, bauds, quick_units, deep_max_unit, modbus_timeout)
@@ -153,15 +156,16 @@ def detect_port_forced(cfg, port, protocol, baud, parity="N", stopbits=1, bytesi
     if protocol == MSTP:
         result = mstp.probe_port(cfg, port, baud, timeout=mstp_timeout)
         devices = result["devices"]
+        device_macs = result.get("device_macs") or {}
         device_objects = _dump_mstp_devices(cfg, port, baud, devices) if devices else {}
         STATE.set_port_state(
             port, protocol=MSTP, baud=baud, parity=parity, stopbits=stopbits, bytesize=bytesize,
-            devices=devices, device_objects=device_objects, last_scan=time.time(),
+            devices=devices, device_macs=device_macs, device_objects=device_objects, last_scan=time.time(),
             last_confirmed=time.time() if devices else 0.0,
             note=f"forced MS/TP @ {baud}" + ("" if devices else " - no response yet, check wiring/baud"),
         )
-        log.info("%s: forced MS/TP @ %s baud, devices=%s", port, baud, devices)
-        return {"port": port, "protocol": MSTP, "baud": baud, "devices": devices}
+        log.info("%s: forced MS/TP @ %s baud, devices=%s, macs=%s", port, baud, devices, device_macs)
+        return {"port": port, "protocol": MSTP, "baud": baud, "devices": devices, "device_macs": device_macs}
 
     if protocol == MODBUS_RTU:
         quick_units = cfgmod.autodetect_modbus_quick_units(cfg)
@@ -198,6 +202,10 @@ def _reverify(cfg, state):
     if state.protocol == MSTP:
         result = mstp.probe_port(cfg, port, baud, timeout=cfgmod.autodetect_mstp_probe_timeout(cfg))
         still_there = bool(result["devices"])
+        if result.get("device_macs"):
+            merged = dict(state.device_macs or {})
+            merged.update(result["device_macs"])
+            state.device_macs = merged
     elif state.protocol == MODBUS_RTU:
         units = state.devices or [1]
         still_there = any(
@@ -259,6 +267,8 @@ def run_loop(cfg, stop_event):
         known_ports = current_ports
 
         for port in sorted(current_ports):
+            if STATE.is_port_busy(port):
+                continue
             state = STATE.get_port_state(port)
             override = STATE.get_override(port)
             try:

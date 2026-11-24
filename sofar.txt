@@ -760,4 +760,41 @@ CHAPTER - RTC BATTERY + TRICKLE CHARGING + VNC USERNAME (2026-11-24)
 - Enabled 3.0 V trickle charging for the rechargeable Pi 5 RTC battery: added `dtparam=rtc_bbat_vchg=3000000` under `[all]` in /boot/firmware/config.txt. Verified after reboot: charging_voltage=3000000, battery_voltage=3333330, and RTC time persisted across reboot.
 - VNC (wayvnc) login: kept Linux user as `admin` (so /home/admin, predator-gateway, and ~/.wine-icc stay intact) and configured /etc/wayvnc/config with `enable_pam=false`, `username=admin123`, and a dedicated VNC password (not recorded here; file locked to root:vnc mode 640, original backed up to /etc/wayvnc/config.bak). Verified wayvnc, predator-gateway, and eth0-stable-watch all active after reboot.
 
+CHAPTER - FULL 3-TIER UPGRADE + UI POLISH + PORT B PROTOCOLS + KALI DRAGON ICON (2026-11-24)
+- Tier 1 (Field Discovery & Offline Web Command Center):
+  * gateway/mstp.py: parses real hex MS/TP MAC addresses directly from bacwi output, extracts live Present_Value / Units / Description / writable from bacepics, and supports typed BACnet WriteProperty (Real / Binary Enumerated / Multi-State Unsigned) plus priority Relinquish (NULL tag 0).
+  * gateway/bacnet_ip.py: walks remote BACnet/IP device object lists (names, live values, units, descriptions) and provides thread-safe live ReadProperty / WriteProperty / Relinquish helpers.
+  * gateway/web_ui.py + gateway/api.py: turned http://192.168.1.50:8099/ into a full offline, zero-dependency monochrome dark-mode Predator Web Command Center with live Pi health pill, searchable/sortable 6-column Points table (click any BACnet row for live Read/Write/Relinquish), Mirius/ICC configurator, Tools tab (Serial Ports, Bus Doctor, Network Recon, Snapshots & Diff, Pi Health), Export dropdown (/export.csv, /export.xlsx, /export.icsproj, /recon/export.csv), and live JSON endpoints.
+- Tier 2 (Mirius ICC Generator v2 & On-Pi Explorer GUI):
+  * gateway/icc_project.py:
+    - Auto-uses discovered bacwi MS/TP MAC addresses (still overridable via config or UI).
+    - Pins ICC Database Addresses in ~/predator_db_map.json so rescans append new points instead of shifting existing Port B addresses.
+    - Supports per-point include/exclude and 32-bit IEEE float toggle (with decimal auto-hinting) and adds live Present Value + Units columns to Predator_Points.xlsx.
+    - Added full Mirius Port B (<Port><Index>0</Index>) generation matching ConfigurationStudio.exe 3.8.3.0 (verified by decompiling ApplicationConfigurationModel.cs via ilspycmd):
+      1. None (Port A Only - leave Port B empty to add niche protocols in ICC Studio)
+      2. BACnet MS/TP Server (Proto ID 3, <BNObj>, Baud/MAC/DevID/DevName, units, polarity, relinquish defaults, 32-bit float supported)
+      3. Siemens FLN Slave / P1 (Proto ID 18, <FlnObj> LDI/LDO/LAI/LAO, FLN Baud/Addr/AppNum/AppDesc)
+      4. Modbus RTU Slave (Proto ID 2, Baud/Parity/Unit ID, DefMap=1 exposing full Mirius DB)
+      5. Metasys N2 Slave (Proto ID 12, fixed 9600/8N1, N2 Addr 1-255, <N2Obj> AI/AO/BI/BO)
+  * gateway/viewer.py: rebuilt into a clean 3-tab dark-mode field explorer (Points with search/sort/scroll-preservation + double-click live R/W dialog, Mirius / ICC with Port B selector + Open in ICC Studio button, and Tools switcher for Serial Ports / Bus Doctor / Network Recon / Snapshots & Diff).
+- Tier 3 (Field-Kit Tools):
+  * gateway/telemetry.py: live Pi CPU temperature (in °F and °C), power/throttled status (vcgencmd), RTC battery & trickle-charge voltage, eth0 speed/duplex/EEE, RAM/disk, and systemd service status.
+  * gateway/bus_doctor.py: passive listen-only RS-485 MS/TP sniffer (never transmits) reporting active master MACs, token rotation rate, frame breakdown, CRC errors, I-Am devices, passive points, and plain-English wiring verdicts.
+  * gateway/recon.py: background runner for the predator/ multi-protocol scanner (BACnet, Modbus TCP, MQTT, PROFINET, EtherNet/IP, S7, OPC UA, KNX, industrial TCP ports) with live logs and CSV export.
+  * gateway/snapshots.py: named site/equipment snapshots (~/predator_snapshots/) and before/after diffing (added, removed, changed, unchanged).
+  * scripts/usb-export.sh + scripts/99-predator-usb-export.rules + scripts/install-usb-export.sh: installed on the Pi; plugging in any FAT32/exFAT/NTFS USB stick auto-copies a timestamped folder with CSV, Excel, .icsproj, recon CSV, and snapshots, syncs, blinks the Pi ACT LED 5x, and sends a desktop toast.
+- Branding, Usability & UI Polish:
+  * Replaced the old green panther ("cat face") gateway/assets/predator-icon.png with a 512x512 Kali dragon icon cropped directly from gateway/assets/predator-wallpaper.png so the Web UI header/favicon, Explorer window icon, and Pi top taskbar all match the wallpaper. Safely restarted wf-panel-pi (without touching lwrespawn) so the new dragon icon appeared in the Pi taskbar immediately.
+  * Decluttered both Web UI and Tkinter Explorer to a clean monochrome obsidian + bone-white layout (3 tabs, single top status pill, Export dropdown, collapsible Mirius per-point table).
+  * Switched CPU temperature display to °F everywhere (warn > 158°F; Pi running ~116°F).
+  * Added gateway/demo.py (/demo/load & /demo/clear) plus top-bar Demo / Clear Demo toggle and per-tool Fill Demo / Demo Diff buttons in both Web UI and Explorer GUI so users can see realistic chiller/AHU examples in every form and tab without live hardware attached.
+  * Added bright white circular `?` help buttons across every Web UI screen/tool and context-aware `?` help buttons in the Tkinter Explorer explaining what each screen does and how to fill out every field.
+  * Fixed Tkinter ttk.Combobox readonly dropdown contrast in gateway/viewer.py to black text on white background (fixing white-on-white unreadable text on Linux/VNC).
+- Verification & Deployment:
+  * Added tests/test_gateway_features.py (all 24 local tests passing; 41/41 tests passing on the Pi inside ~/predator-venv/bin/python).
+  * Deployed gateway/, predator/, tests/, scripts/, and the new Kali dragon predator-icon.png to admin@192.168.1.50:/home/admin/predator/.
+  * Restarted predator-gateway and installed the USB auto-export udev rule; verified HTTP 200 on /, /assets/predator-icon.png, /rows, /icc/preview, /snapshots, /recon/status, and /telemetry.
+
+
+
 

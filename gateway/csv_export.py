@@ -60,8 +60,9 @@ def _serial_rows():
                 rows.append({
                     "source": state.protocol, "bus_or_network": f"{state.port}@{state.baud}",
                     "address": dev, "object_or_register": f"{obj.get('type')}:{obj.get('instance')}",
-                    "data_type": "", "description": obj.get("name", ""), "value": "",
-                    "units": "", "writable": "", "last_seen": last_seen,
+                    "data_type": "", "description": obj.get("name") or obj.get("description", ""),
+                    "value": obj.get("value", ""), "units": obj.get("units", ""),
+                    "writable": obj.get("writable", ""), "last_seen": last_seen,
                 })
     return rows
 
@@ -80,9 +81,9 @@ def _bacnet_ip_rows():
                 "source": "bacnet-ip", "bus_or_network": dev.address,
                 "address": dev.device_instance,
                 "object_or_register": f"{obj.get('type')}:{obj.get('instance')}",
-                "data_type": "", "description": obj.get("name", ""),
-                "value": obj.get("value", ""), "units": "", "writable": "",
-                "last_seen": _fmt_ts(dev.last_seen),
+                "data_type": "", "description": obj.get("name") or obj.get("description", ""),
+                "value": obj.get("value", ""), "units": obj.get("units", ""),
+                "writable": obj.get("writable", ""), "last_seen": _fmt_ts(dev.last_seen),
             })
     return rows
 
@@ -135,7 +136,7 @@ def write_csv(cfg):
     os.replace(tmp, path)
 
     try:
-        icc_project.write_if_configured(cfg, rows)
+        icc_project.write_if_configured(cfg, rows, discovered_macs=STATE.mstp_device_macs())
     except Exception:  # noqa: BLE001
         log.exception("error writing ICC project")
 

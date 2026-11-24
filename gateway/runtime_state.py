@@ -32,10 +32,9 @@ class PortState:
     stopbits: int = 1
     bytesize: int = 8
     devices: list = dataclasses.field(default_factory=list)  # mstp device instances or modbus unit ids
-    # mstp device_instance -> [{"type","instance","name"}, ...] from bacepics (gateway/mstp.py
-    # dump_device()) - the actual BACnet object addresses needed to configure points into a BMS
-    # (e.g. Insight/Apogee), not just "a device is out there". Modbus has no equivalent self-
-    # describing object list, so this stays empty for modbus-rtu ports.
+    # mstp device_instance -> real MS/TP MAC (0..127) parsed directly from bacwi output
+    device_macs: dict = dataclasses.field(default_factory=dict)
+    # mstp device_instance -> [{"type","instance","name","value","units","description","writable"}, ...]
     device_objects: dict = dataclasses.field(default_factory=dict)
     last_scan: float = 0.0
     last_confirmed: float = 0.0
@@ -78,6 +77,24 @@ class RuntimeState:
         self._overrides = {}     # port path -> PortOverride
         self._bacnet_ip = {}     # device_instance -> BacnetIpDevice
         self._point_values = {}  # point name -> {"value", "error", "ts"}
+        self._busy_ports = set() # ports temporarily claimed by Bus Doctor / Recon
+
+    # ---- port locking for exclusive tools (Bus Doctor / Recon) ----
+
+    def claim_port(self, port):
+        with self._lock:
+            if port in self._busy_ports:
+                return False
+            self._busy_ports.add(port)
+            return True
+
+    def release_port(self, port):
+        with self._lock:
+            self._busy_ports.discard(port)
+
+    def is_port_busy(self, port):
+        with self._lock:
+            return port in self._busy_ports
 
     # ---- serial ports ----
 
@@ -110,6 +127,32 @@ class RuntimeState:
                 if state.protocol == protocol:
                     return state
             return None
+
+    def mstp_device_macs(self):
+        """Merged {device_instance: mac} discovered across all MS/TP serial ports."""
+        with self._lock:
+            macs = {}
+            for state in self._ports.values():
+                if state.protocol == MSTP and state.device_macs:
+                    for dev, mac in state.device_macs.items():
+                        try:
+                            macs[int(dev)] = int(mac)
+                        except (TypeError, ValueError):
+                            pass
+            return macs
+
+    def find_mstp_device(self, device_instance):
+        """Return (PortState, mac_or_None) for a discovered MS/TP device, or (None, None)."""
+        with self._lock:
+            target = int(device_instance)
+            for state in self._ports.values():
+                if state.protocol == MSTP and target in (state.devices or []):
+                    return state, (state.device_macs or {}).get(target)
+            return None, None
+
+    def get_bacnet_ip_device(self, device_instance):
+        with self._lock:
+            return self._bacnet_ip.get(int(device_instance))
 
     # ---- manual overrides (explorer GUI troubleshooting) ----
 

@@ -1,0 +1,5 @@
+# Auto-dump Predator CSV, Excel point map, and Mirius .icsproj whenever a
+# USB flash drive partition is plugged into the Pi. Uses systemd-run so the
+# mount/copy/sync runs outside udev's short timeout and restricted mount namespace.
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{DEVTYPE}=="partition", \
+  RUN+="/usr/bin/systemd-run --no-block /usr/local/sbin/predator-usb-export.sh /dev/%k"

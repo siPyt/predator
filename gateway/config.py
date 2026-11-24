@@ -56,6 +56,9 @@ _DEFAULTS = {
         "port": "47808",
         # Periodic global Who-Is interval used for passive BACnet/IP discovery (seconds).
         "discovery_whois_seconds": "30",
+        "walk_objects": "true",
+        "max_objects_per_device": "200",
+        "object_refresh_seconds": "300",
     },
     "autodetect": {
         # Figures out, per serial port, whether it's carrying BACnet MS/TP or
@@ -89,11 +92,35 @@ _DEFAULTS = {
         "desktop_copy": "~/Desktop/Predator_Mirius_BACnet.icsproj",
         "xlsx_path": "~/predator_points.xlsx",
         "xlsx_desktop_copy": "~/Desktop/Predator_Points.xlsx",
-        # BACnet MS/TP MAC address of the discovered devices (bacwi's MAC is not kept by
-        # discovery). Must match the device's own MS/TP address; override per device
-        # as "instance=mac,instance=mac".
+        # BACnet MS/TP MAC fallback if bacwi didn't capture a device's MAC;
+        # per-device explicit overrides ("instance=mac,instance=mac") take priority.
         "default_mac": "1",
         "device_macs": "",
+        # Pin (device, type, instance) -> ICC Database Address across rescans so
+        # newly discovered points append instead of shifting Port B addresses.
+        "db_map_path": "~/predator_db_map.json",
+        # Per-point UI selections (included/excluded, float32, custom MAC/Port B settings).
+        "ui_config_path": "~/predator_icc_ui.json",
+        # Optional Mirius Port B auto-generation: "none" | "bacnet-mstp" | "fln" | "modbus-rtu" | "metasys-n2"
+        "include_port_b": "false",
+        "port_b_protocol": "none",
+        "fln_baud": "4800",
+        "fln_addr": "1",
+        "fln_app_num": "2766",
+        "port_b_baud": "38400",
+        "port_b_mac": "10",
+        "port_b_device_instance": "10000",
+        "port_b_device_name": "Mirius_B",
+        "modbus_baud": "9600",
+        "modbus_parity": "0",
+        "modbus_addr": "1",
+        "n2_addr": "1",
+    },
+    "snapshots": {
+        "dir": "~/predator_snapshots",
+    },
+    "recon": {
+        "output_csv": "~/predator_recon.csv",
     },
     "overrides": {
         # Manual per-port troubleshooting overrides set from the explorer GUI
